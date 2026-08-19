@@ -2,6 +2,32 @@ import Foundation
 import Testing
 @testable import TeleprompterCore
 
+@Test("Initial capture sample is accepted without a complete status")
+func initialCaptureSampleIsAccepted() {
+    #expect(
+        CaptureFramePolicy.shouldDeliver(
+            statusRawValue: nil,
+            hasDeliveredInitialFrame: false
+        )
+    )
+}
+
+@Test("Idle capture samples are dropped after initialization")
+func idleCaptureSamplesAreDroppedAfterInitialization() {
+    #expect(
+        !CaptureFramePolicy.shouldDeliver(
+            statusRawValue: 1,
+            hasDeliveredInitialFrame: true
+        )
+    )
+    #expect(
+        CaptureFramePolicy.shouldDeliver(
+            statusRawValue: 0,
+            hasDeliveredInitialFrame: true
+        )
+    )
+}
+
 @Test("Teleprompter default mirrors horizontally at zero degrees")
 func teleprompterDefaultTransform() {
     let value = DisplayTransform.teleprompterDefault

@@ -18,6 +18,8 @@ enum CapturePipelineError: LocalizedError {
 final class StreamOutputBridge: NSObject, SCStreamOutput {
     private let frameReceiver: FrameReceiver
     private var loggedFirstFrame = false
+    private var loggedFirstSample = false
+    private var deliveredInitialFrame = false
 
     init(frameReceiver: FrameReceiver) {
         self.frameReceiver = frameReceiver
@@ -35,15 +37,26 @@ final class StreamOutputBridge: NSObject, SCStreamOutput {
             return
         }
 
-        guard let statusNumber = CMGetAttachment(
+        let statusNumber = CMGetAttachment(
             sampleBuffer,
             key: SCStreamFrameInfo.status.rawValue as CFString,
             attachmentModeOut: nil
-        ) as? NSNumber,
-        let status = SCFrameStatus(rawValue: statusNumber.intValue),
-        status == .complete else {
+        ) as? NSNumber
+        if !loggedFirstSample {
+            loggedFirstSample = true
+            NSLog(
+                "Erster Capture-Sample-Status: %d",
+                statusNumber?.intValue ?? -1
+            )
+        }
+
+        guard CaptureFramePolicy.shouldDeliver(
+            statusRawValue: statusNumber?.intValue,
+            hasDeliveredInitialFrame: deliveredInitialFrame
+        ) else {
             return
         }
+        deliveredInitialFrame = true
 
         if !loggedFirstFrame {
             loggedFirstFrame = true
