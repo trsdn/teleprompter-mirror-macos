@@ -1,7 +1,7 @@
 import CoreMedia
 import CoreVideo
 import Foundation
-import ScreenCaptureKit
+@preconcurrency import ScreenCaptureKit
 import TeleprompterCore
 
 enum CapturePipelineError: LocalizedError {

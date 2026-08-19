@@ -1,6 +1,6 @@
 import AppKit
 import CoreGraphics
-import ScreenCaptureKit
+@preconcurrency import ScreenCaptureKit
 import TeleprompterCore
 
 struct DisplayDescriptor: Identifiable, Hashable, Sendable {
