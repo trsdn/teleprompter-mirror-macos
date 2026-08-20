@@ -373,11 +373,11 @@ public enum CaptureSourceKind: String, Codable, CaseIterable, Sendable {
     public var localizedName: String {
         switch self {
         case .virtualDisplay:
-            return "Virtueller Monitor"
+            return "Virtual display"
         case .display:
-            return "Monitor"
+            return "Display"
         case .window:
-            return "Fenster"
+            return "Window"
         }
     }
 }

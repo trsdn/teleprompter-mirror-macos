@@ -76,19 +76,19 @@ enum DisplayResolutionError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .virtualSourceUnavailable:
-            return "Der virtuelle Quellmonitor ist für die Bildschirmaufnahme nicht verfügbar."
+            return "The virtual source display is not available for screen capture."
         case .sourceDisplayUnavailable:
-            return "Der gewählte Quellmonitor ist nicht eindeutig verbunden."
+            return "The selected source display is not unambiguously connected."
         case .sourceWindowUnavailable:
-            return "Das gewählte Quellfenster ist nicht eindeutig geöffnet."
+            return "The selected source window is not unambiguously open."
         case .sourceIsTarget:
-            return "Quelle und Ziel dürfen nicht derselbe Monitor sein, sonst entsteht eine optische Endlosschleife."
+            return "Source and target must not be the same display, otherwise an optical feedback loop occurs."
         case let .screenCaptureSourceUnavailable(displayID):
-            return "ScreenCaptureKit hat den Quellmonitor mit ID \(displayID) nicht gefunden."
+            return "ScreenCaptureKit did not find the source display with ID \(displayID)."
         case .targetDisplayUnavailable:
-            return "Der gewählte Zielmonitor ist nicht eindeutig verbunden."
+            return "The selected target display is not unambiguously connected."
         case .configurationChanged:
-            return "Die Monitorkonfiguration hat sich während des Starts geändert."
+            return "The display configuration changed while starting up."
         }
     }
 }
@@ -188,7 +188,7 @@ enum DisplayCatalog {
             )
         } catch {
             NSLog(
-                "Fensterliste konnte nicht ermittelt werden: %@",
+                "Could not determine the window list: %@",
                 error.localizedDescription
             )
             return []
@@ -435,7 +435,7 @@ enum DisplayCatalog {
 
         if let lastEnumerationError {
             NSLog(
-                "ScreenCaptureKit-Aufzählung für Display %u fehlgeschlagen: %@",
+                "ScreenCaptureKit enumeration failed for display %u: %@",
                 displayID,
                 lastEnumerationError.localizedDescription
             )

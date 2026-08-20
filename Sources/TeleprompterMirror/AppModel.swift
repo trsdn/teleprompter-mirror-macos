@@ -20,9 +20,9 @@ private enum AppModelError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case let .captureStoppedDuringStart(message):
-            return "Die Bildschirmaufnahme wurde beim Start beendet: \(message)"
+            return "Screen capture stopped during startup: \(message)"
         case let .renderingFailedDuringStart(message):
-            return "Die Bildausgabe ist beim Start fehlgeschlagen: \(message)"
+            return "Image output failed during startup: \(message)"
         }
     }
 }
@@ -38,7 +38,7 @@ private enum SettingsStore {
             return try AppSettingsCodec.decode(data)
         } catch {
             NSLog(
-                "Gespeicherte Einstellungen sind ungültig; Standardwerte werden verwendet: %@",
+                "Stored settings are invalid; falling back to defaults: %@",
                 error.localizedDescription
             )
             return .defaults
@@ -50,7 +50,7 @@ private enum SettingsStore {
             defaults.set(try AppSettingsCodec.encode(settings), forKey: key)
         } catch {
             NSLog(
-                "Einstellungen konnten nicht gespeichert werden: %@",
+                "Could not save settings: %@",
                 error.localizedDescription
             )
         }
@@ -71,13 +71,13 @@ final class AppModel: ObservableObject {
     @Published private(set) var isBusy = false
     @Published private(set) var isRefreshingWindows = false
     @Published private(set) var permissionGranted = false
-    @Published private(set) var statusText = "Monitore werden gesucht …"
+    @Published private(set) var statusText = "Looking for displays …"
     @Published private(set) var statusIsError = false
     @Published private(set) var loginItemEnabled = false
     @Published private(set) var loginItemBusy = false
     @Published private(set) var loginItemNeedsApproval = false
     @Published private(set) var loginItemStatusText =
-        "Anmeldestatus wird geprüft …"
+        "Checking launch-at-login status …"
     @Published private(set) var loginItemStatusIsError = false
 
     private enum Lifecycle: Equatable {
@@ -188,20 +188,20 @@ final class AppModel: ObservableObject {
     var sourceSummary: String {
         switch sourceKind {
         case .virtualDisplay:
-            return "Virtueller Monitor „\(VirtualSource.name)“ (\(VirtualSource.width)×\(VirtualSource.height))"
+            return "Virtual display \"\(VirtualSource.name)\" (\(VirtualSource.width)×\(VirtualSource.height))"
         case .display:
             guard let identity = workingSource.display else {
-                return "Kein Quellmonitor ausgewählt."
+                return "No source display selected."
             }
             return selectedSourceDisplayID == nil
-                ? "Gespeicherter Quellmonitor, derzeit nicht eindeutig verbunden: \(identity.localizedName)"
+                ? "Stored source display, currently not unambiguously connected: \(identity.localizedName)"
                 : identity.localizedName
         case .window:
             guard let identity = workingSource.window else {
-                return "Kein Quellfenster ausgewählt."
+                return "No source window selected."
             }
             return selectedSourceWindowID == nil
-                ? "Gespeichertes Fenster, derzeit nicht eindeutig geöffnet: \(identity.localizedName)"
+                ? "Stored window, currently not unambiguously open: \(identity.localizedName)"
                 : identity.localizedName
         }
     }
@@ -211,7 +211,7 @@ final class AppModel: ObservableObject {
               let identity = workingTargetIdentity else {
             return nil
         }
-        return "Gespeichertes Ziel, derzeit nicht eindeutig verbunden: \(identity.localizedName) — \(identity.nativeLongEdge)×\(identity.nativeShortEdge)"
+        return "Stored target, currently not unambiguously connected: \(identity.localizedName) — \(identity.nativeLongEdge)×\(identity.nativeShortEdge)"
     }
 
     var singleDisplayNotice: String? {
@@ -219,9 +219,9 @@ final class AppModel: ObservableObject {
             return nil
         }
         if sourceKind == .display {
-            return "Nur ein physischer Monitor ist verbunden; er kann nicht gleichzeitig Quelle und Ziel sein. Fenstermodus oder virtuellen Monitor wählen."
+            return "Only one physical display is connected; it cannot be source and target at the same time. Choose window mode or the virtual display."
         }
-        return "Nur ein physischer Monitor ist verbunden; er dient als Ziel und die Ausgabe überdeckt dort den Schreibtisch. Stoppen bleibt über das Statusmenü erreichbar."
+        return "Only one physical display is connected; it serves as the target and the output covers the desktop there. Stopping stays available from the status menu."
     }
 
     var appIsInApplicationsFolder: Bool {
@@ -271,11 +271,11 @@ final class AppModel: ObservableObject {
             virtualDisplayHost = host
             virtualDisplayID = displayID
             lifecycleLogger.notice(
-                "Virtueller Quellmonitor im Display-Host erstellt: \(displayID, privacy: .public) (\(VirtualSource.width, privacy: .public)×\(VirtualSource.height, privacy: .public))"
+                "Virtual source display created in the display host: \(displayID, privacy: .public) (\(VirtualSource.width, privacy: .public)×\(VirtualSource.height, privacy: .public))"
             )
         } catch {
             setStatus(
-                "Der virtuelle Quellmonitor konnte nicht erstellt werden: \(error.localizedDescription)",
+                "The virtual source display could not be created: \(error.localizedDescription)",
                 isError: true
             )
             return
@@ -315,7 +315,7 @@ final class AppModel: ObservableObject {
             }
             if isRunning || captureSession != nil {
                 await stopCommittedOutput(
-                    message: "Quelle gewechselt; Ausgabe wird neu aufgebaut.",
+                    message: "Source changed; rebuilding the output.",
                     isError: false
                 )
             }
@@ -424,7 +424,7 @@ final class AppModel: ObservableObject {
         }
         Task { @MainActor [weak self] in
             await self?.reconcileOutput(
-                stopMessage: "Automatische Ausgabe wurde deaktiviert."
+                stopMessage: "Automatic output was disabled."
             )
         }
     }
@@ -449,7 +449,7 @@ final class AppModel: ObservableObject {
             }
             if lifecycle == .idle || wasBlockedOnPermission {
                 setStatus(
-                    "Bildschirmaufnahme ist erlaubt.",
+                    "Screen recording is allowed.",
                     isError: false
                 )
             }
@@ -461,7 +461,7 @@ final class AppModel: ObservableObject {
         } else {
             if lifecycle != .running {
                 setStatus(
-                    "Bildschirmaufnahme ist nicht erlaubt. Zugriff in den Systemeinstellungen freigeben.",
+                    "Screen recording is not allowed. Grant access in System Settings.",
                     isError: true
                 )
             }
@@ -482,7 +482,7 @@ final class AppModel: ObservableObject {
                 blockReason = nil
             }
             setStatus(
-                "Berechtigung erteilt. Die Ausgabe kann jetzt starten.",
+                "Permission granted. The output can start now.",
                 isError: false
             )
             if desiredOutput {
@@ -494,7 +494,7 @@ final class AppModel: ObservableObject {
             blockReason = .permission
             setLifecycle(.blocked)
             setStatus(
-                "Berechtigung wurde nicht erteilt. Systemeinstellungen → Datenschutz & Sicherheit → Bildschirmaufnahme öffnen.",
+                "Permission was not granted. Open System Settings → Privacy & Security → Screen Recording.",
                 isError: true
             )
         }
@@ -505,7 +505,7 @@ final class AppModel: ObservableObject {
             string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
         ), NSWorkspace.shared.open(url) else {
             setStatus(
-                "Die Systemeinstellungen konnten nicht geöffnet werden.",
+                "System Settings could not be opened.",
                 isError: true
             )
             return
@@ -520,7 +520,7 @@ final class AppModel: ObservableObject {
             string: "x-apple.systempreferences:com.apple.Displays-Settings.extension"
         ), NSWorkspace.shared.open(url) else {
             setStatus(
-                "Die Bildschirmeinstellungen konnten nicht geöffnet werden.",
+                "Display Settings could not be opened.",
                 isError: true
             )
             return
@@ -535,25 +535,25 @@ final class AppModel: ObservableObject {
         switch status {
         case .enabled:
             loginItemEnabled = true
-            loginItemStatusText = "Start bei Anmeldung ist registriert."
+            loginItemStatusText = "Launch at login is registered."
         case .notRegistered:
             loginItemEnabled = false
-            loginItemStatusText = "Start bei Anmeldung ist deaktiviert."
+            loginItemStatusText = "Launch at login is disabled."
         case .requiresApproval:
             loginItemEnabled = true
             loginItemNeedsApproval = true
             loginItemStatusIsError = true
             loginItemStatusText =
-                "Registriert, aber noch in den Systemeinstellungen zu erlauben."
+                "Registered, but still needs to be allowed in System Settings."
         case .notFound:
             loginItemEnabled = false
             loginItemStatusIsError = true
             loginItemStatusText =
-                "Der Anmeldedienst wurde für dieses App-Bundle nicht gefunden."
+                "The login service was not found for this app bundle."
         @unknown default:
             loginItemEnabled = false
             loginItemStatusIsError = true
-            loginItemStatusText = "Unbekannter Anmeldestatus."
+            loginItemStatusText = "Unknown launch-at-login status."
         }
     }
 
@@ -578,7 +578,7 @@ final class AppModel: ObservableObject {
                 refreshLoginItemStatus()
                 loginItemStatusIsError = true
                 loginItemStatusText =
-                    "Änderung fehlgeschlagen: \(error.localizedDescription)"
+                    "Change failed: \(error.localizedDescription)"
             }
             loginItemBusy = false
         }
@@ -595,7 +595,7 @@ final class AppModel: ObservableObject {
         await reconcileOutput()
     }
 
-    func requestStop(message: String = "Ausgabe beendet.") {
+    func requestStop(message: String = "Output stopped.") {
         manualStopSuppressed = true
         desiredOutput = false
         blockReason = nil
@@ -643,7 +643,7 @@ final class AppModel: ObservableObject {
             || lifecycle == .running
             || isBusy {
             await stopCommittedOutput(
-                message: "App wird beendet.",
+                message: "The app is quitting.",
                 isError: false
             )
         }
@@ -663,7 +663,7 @@ final class AppModel: ObservableObject {
         await ensureVirtualSource()
         guard let virtualDisplayID else {
             finishSelfTest(
-                "SELF_TEST_FAIL: Der virtuelle Quellmonitor konnte nicht erstellt werden.",
+                "SELF_TEST_FAIL: The virtual source display could not be created.",
                 isError: true
             )
             return
@@ -671,7 +671,7 @@ final class AppModel: ObservableObject {
         updatePermissionStatus()
         guard permissionGranted else {
             finishSelfTest(
-                "SELF_TEST_SKIP: Für com.github.trsdn.TeleprompterMirror ist keine Bildschirmaufnahme-Berechtigung vorhanden.",
+                "SELF_TEST_SKIP: com.github.trsdn.TeleprompterMirror has no screen recording permission.",
                 isError: false
             )
             return
@@ -683,7 +683,7 @@ final class AppModel: ObservableObject {
             preferredName: preferredTargetName
         ) else {
             finishSelfTest(
-                "SELF_TEST_FAIL: Kein physischer Zielmonitor ist verfügbar.",
+                "SELF_TEST_FAIL: No physical target display is available.",
                 isError: true
             )
             return
@@ -697,7 +697,7 @@ final class AppModel: ObservableObject {
         desiredOutput = true
 
         let startMessage =
-            "SELF_TEST_START: virtueller Quellmonitor \(virtualDisplayID) → Zielmonitor \(target.name) ID \(target.id) (\(target.pixelWidth)x\(target.pixelHeight))"
+            "SELF_TEST_START: virtual source display \(virtualDisplayID) → target display \(target.name) ID \(target.id) (\(target.pixelWidth)x\(target.pixelHeight))"
         NSLog("%@", startMessage)
         lifecycleLogger.notice("\(startMessage, privacy: .public)")
 
@@ -712,7 +712,7 @@ final class AppModel: ObservableObject {
                 return
             }
             finishSelfTest(
-                "SELF_TEST_FAIL: Innerhalb von 15 Sekunden wurde kein Frame dargestellt.",
+                "SELF_TEST_FAIL: No frame was presented within 15 seconds.",
                 isError: true
             )
         }
@@ -797,7 +797,7 @@ final class AppModel: ObservableObject {
     }
 
     private func reconcileOutput(
-        stopMessage: String = "Ausgabe beendet."
+        stopMessage: String = "Output stopped."
     ) async {
         guard didLaunch else {
             return
@@ -825,7 +825,7 @@ final class AppModel: ObservableObject {
         guard permissionGranted else {
             blockReason = .permission
             let message =
-                "Automatischer Start wartet auf Bildschirmaufnahme-Berechtigung. Bitte Zugriff erlauben."
+                "Automatic start is waiting for screen recording permission. Please grant access."
             if lifecycle == .running || captureSession != nil {
                 await stopCommittedOutput(
                     message: message,
@@ -840,7 +840,7 @@ final class AppModel: ObservableObject {
 
         if usesVirtualSource, virtualDisplayID == nil {
             let message =
-                "Der virtuelle Quellmonitor konnte nicht erstellt werden (private API nicht verfügbar)."
+                "The virtual source display could not be created (private API unavailable)."
             if lifecycle == .running || captureSession != nil {
                 await stopCommittedOutput(message: message, isError: true)
             } else {
@@ -880,7 +880,7 @@ final class AppModel: ObservableObject {
                   activeSnapshot.targetDescriptor.frame
                     == target.frame else {
                 await stopCommittedOutput(
-                    message: "Monitorkonfiguration geändert; Ausgabe wird neu gestartet.",
+                    message: "Display configuration changed; restarting the output.",
                     isError: false
                 )
                 return
@@ -952,7 +952,7 @@ final class AppModel: ObservableObject {
         pendingCaptureStop = nil
         pendingRenderingFailure = nil
         setLifecycle(.starting(epoch))
-        setStatus("Aufnahme wird sicher vorbereitet …", isError: false)
+        setStatus("Preparing the capture safely …", isError: false)
 
         var localOutput: OutputWindowController?
         var localSession: CaptureSession?
@@ -1067,11 +1067,11 @@ final class AppModel: ObservableObject {
             setLifecycle(.running)
             output.reveal()
             setStatus(
-                "Ausgabe aktiv; warte auf den ersten vollständigen Frame …",
+                "Output active; waiting for the first complete frame …",
                 isError: false
             )
             lifecycleLogger.notice(
-                "Ausgabe gestartet: Quelle \(snapshot.sourceLabel, privacy: .public) → Zielmonitor \(snapshot.targetDescriptor.id, privacy: .public)"
+                "Output started: source \(snapshot.sourceLabel, privacy: .public) → target display \(snapshot.targetDescriptor.id, privacy: .public)"
             )
         } catch {
             let startError = error
@@ -1098,23 +1098,22 @@ final class AppModel: ObservableObject {
 
             refreshDisplaySnapshot()
             if isTransientSourceStartError(startError) {
-                // Der virtuelle Quellmonitor ist noch nicht online bzw. für die
-                // Bildschirmaufnahme bereit (z. B. unmittelbar nach dem
-                // Erstellen beim Login-Autostart) oder die Monitorkonfiguration
-                // hat sich während des Starts geändert. Nicht dauerhaft
-                // blockieren: auf die nächste Monitoränderung warten und dann
-                // automatisch erneut versuchen.
+                // The virtual source display is not online or ready for screen
+                // capture yet (for example right after creation during a
+                // launch-at-login start), or the display configuration changed
+                // while starting up. Do not block permanently: wait for the
+                // next display change and retry automatically.
                 blockReason = nil
                 setLifecycle(.waiting)
                 setStatus(
-                    "Warte auf den virtuellen Quellmonitor „\(VirtualSource.name)“ …",
+                    "Waiting for the virtual source display \"\(VirtualSource.name)\" …",
                     isError: false
                 )
             } else if resolvedTarget != nil {
                 blockReason = .capture
                 setLifecycle(.blocked)
                 setStatus(
-                    "Start fehlgeschlagen: \(startError.localizedDescription) Erneut mit „Ausgabe starten“ versuchen.",
+                    "Start failed: \(startError.localizedDescription) Try again with \"Start output\".",
                     isError: true
                 )
             } else {
@@ -1180,7 +1179,7 @@ final class AppModel: ObservableObject {
             setLifecycle(.idle)
             if let stopError {
                 setStatus(
-                    "\(message) Freigabe meldete: \(stopError.localizedDescription)",
+                    "\(message) Teardown reported: \(stopError.localizedDescription)",
                     isError: true
                 )
             } else {
@@ -1191,7 +1190,7 @@ final class AppModel: ObservableObject {
             setLifecycle(.idle)
             if let stopError, !isError {
                 setStatus(
-                    "\(message) Freigabe meldete: \(stopError.localizedDescription)",
+                    "\(message) Teardown reported: \(stopError.localizedDescription)",
                     isError: true
                 )
             } else {
@@ -1245,7 +1244,7 @@ final class AppModel: ObservableObject {
             if resolvedTarget != nil, resolvedSourceIsAvailable {
                 blockReason = .capture
                 await stopCommittedOutput(
-                    message: "Die Bildschirmaufnahme wurde beendet: \(message) Erneut mit „Ausgabe starten“ versuchen.",
+                    message: "Screen capture stopped: \(message) Try again with \"Start output\".",
                     isError: true
                 )
             } else {
@@ -1279,7 +1278,7 @@ final class AppModel: ObservableObject {
             }
             blockReason = .capture
             await stopCommittedOutput(
-                message: "Die Bildausgabe ist fehlgeschlagen: \(message) Erneut mit „Ausgabe starten“ versuchen.",
+                message: "Image output failed: \(message) Try again with \"Start output\".",
                 isError: true
             )
         }
@@ -1297,13 +1296,13 @@ final class AppModel: ObservableObject {
             selfTestTimeoutTask?.cancel()
             selfTestTimeoutTask = nil
             finishSelfTest(
-                "SELF_TEST_PASS: \(path.rawValue) hat einen Frame des virtuellen Quellmonitors auf dem Zielmonitor dargestellt.",
+                "SELF_TEST_PASS: \(path.rawValue) presented a frame of the virtual source display on the target display.",
                 isError: false
             )
             return
         }
         setStatus(
-            "Ausgabe läuft (\(path.rawValue)). Stoppen über Statusmenü, Steuerfenster oder ⌘.",
+            "Output running (\(path.rawValue)). Stop via the status menu, the control window or ⌘.",
             isError: false
         )
     }
@@ -1351,24 +1350,24 @@ final class AppModel: ObservableObject {
 
     private var waitingStatusText: String {
         guard let workingTargetIdentity else {
-            return "Es ist noch kein Zielmonitor ausgewählt."
+            return "No target display selected yet."
         }
         if selectedDisplayID == nil {
-            return "Warte ruhig auf den gespeicherten Zielmonitor „\(workingTargetIdentity.localizedName)“ …"
+            return "Quietly waiting for the stored target display \"\(workingTargetIdentity.localizedName)\" …"
         }
         switch sourceKind {
         case .virtualDisplay:
-            return "Warte auf den virtuellen Quellmonitor „\(VirtualSource.name)“ …"
+            return "Waiting for the virtual source display \"\(VirtualSource.name)\" …"
         case .display:
             guard let identity = workingSource.display else {
-                return "Es ist noch kein Quellmonitor ausgewählt."
+                return "No source display selected yet."
             }
-            return "Warte ruhig auf den gespeicherten Quellmonitor „\(identity.localizedName)“ …"
+            return "Quietly waiting for the stored source display \"\(identity.localizedName)\" …"
         case .window:
             guard let identity = workingSource.window else {
-                return "Es ist noch kein Quellfenster ausgewählt."
+                return "No source window selected yet."
             }
-            return "Warte ruhig auf das Fenster „\(identity.localizedName)“ …"
+            return "Quietly waiting for the window \"\(identity.localizedName)\" …"
         }
     }
 
@@ -1417,17 +1416,17 @@ final class AppModel: ObservableObject {
         }
         if displays.isEmpty {
             setStatus(
-                "Kein physischer Zielmonitor erkannt.",
+                "No physical target display detected.",
                 isError: false
             )
         } else if !permissionGranted {
             setStatus(
-                "Bildschirmaufnahme ist noch nicht erlaubt.",
+                "Screen recording is not allowed yet.",
                 isError: true
             )
         } else if workingTargetIdentity == nil {
             setStatus(
-                "Einen Zielmonitor für die Ausgabe auswählen.",
+                "Select a target display for the output.",
                 isError: false
             )
         } else if selectedDisplayID == nil {
@@ -1436,7 +1435,7 @@ final class AppModel: ObservableObject {
             setStatus(waitingStatusText, isError: false)
         } else {
             setStatus(
-                "Bereit: \(sourceSummary) → \(resolvedTarget?.name ?? "Zielmonitor").",
+                "Ready: \(sourceSummary) → \(resolvedTarget?.name ?? "target display").",
                 isError: false
             )
         }

@@ -1,20 +1,20 @@
-## Was ändert dieser PR?
+## What does this PR change?
 
-<!-- Kurze Beschreibung der Änderung und ihres Zwecks. -->
+<!-- Brief description of the change and its purpose. -->
 
-## Zugehöriges Issue
+## Related issue
 
-<!-- z. B. "Closes #12" – oder "keins", falls es keines gibt. -->
+<!-- e.g. "Closes #12" — or "none" if there is none. -->
 
-## Wie wurde getestet?
+## How was it tested?
 
-- [ ] `swift build` läuft ohne Warnungen durch
-- [ ] `swift test` ist grün
-- [ ] `./build-app.sh` erzeugt ein signiertes Bundle
-- [ ] Manuell mit mindestens einer Quelle geprüft (Quelle: <!-- virtuell / Monitor / Fenster -->)
+- [ ] `swift build` completes without warnings
+- [ ] `swift test` is green
+- [ ] `./build-app.sh` creates a signed bundle
+- [ ] Checked manually with at least one source (source: <!-- Virtual display / Display / Window -->)
 
-## Checkliste
+## Checklist
 
-- [ ] UI- und Statustexte sind auf Deutsch, Code-Kommentare auf Englisch
-- [ ] Keine neuen Drittanbieter-Abhängigkeiten
-- [ ] README bei Verhaltensänderungen aktualisiert
+- [ ] UI and status text, code comments, and commit messages are in English
+- [ ] No new third-party dependencies
+- [ ] README updated for behavior changes

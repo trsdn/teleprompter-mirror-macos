@@ -48,7 +48,7 @@ private struct OrientationPreview: View {
                 .rotationEffect(.degrees(Double(transform.rotation.rawValue)))
         }
         .frame(width: 74, height: 52)
-        .accessibilityLabel("Vorschau der Ausrichtung")
+        .accessibilityLabel("Orientation preview")
     }
 }
 
@@ -137,10 +137,11 @@ struct ControlView: View {
             Image(systemName: "rectangle.on.rectangle.angled")
                 .font(.title2)
                 .foregroundStyle(.blue)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Teleprompter Mirror")
                     .font(.headline)
-                Text("Monitor, Fenster oder virtuellen Monitor gedreht und gespiegelt ausgeben")
+                Text("Mirror and rotate a display, a window or a virtual display")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -152,7 +153,7 @@ struct ControlView: View {
     @ViewBuilder
     private var runningBadge: some View {
         if model.isRunning {
-            Label("Ausgabe läuft", systemImage: "dot.radiowaves.left.and.right")
+            Label("Output running", systemImage: "dot.radiowaves.left.and.right")
                 .font(.caption.weight(.medium))
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
@@ -162,8 +163,8 @@ struct ControlView: View {
     }
 
     private var sourceSection: some View {
-        ControlSection(title: "Quelle", systemImage: "square.on.square.dashed") {
-            Picker("Quelle", selection: sourceKindBinding) {
+        ControlSection(title: "Source", systemImage: "square.on.square.dashed") {
+            Picker("Source", selection: sourceKindBinding) {
                 ForEach(CaptureSourceKind.allCases, id: \.rawValue) { kind in
                     Text(kind.localizedName).tag(kind)
                 }
@@ -174,7 +175,7 @@ struct ControlView: View {
 
             switch model.sourceKind {
             case .virtualDisplay:
-                Text("Erzeugt einen unsichtbaren Monitor „\(model.virtualSourceName)“. Fenster müssen blind dorthin verschoben werden; sichtbar wird er nur als gespiegeltes Bild auf dem Zielmonitor.")
+                Text("Creates an invisible display named \"\(model.virtualSourceName)\". Windows have to be moved there blindly; it only becomes visible as the mirrored image on the target display.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
 
@@ -182,16 +183,16 @@ struct ControlView: View {
                     model.openDisplaySettings()
                 } label: {
                     Label(
-                        "Anordnung in den Bildschirmeinstellungen …",
+                        "Arrangement in Display Settings …",
                         systemImage: "arrow.up.forward.app"
                     )
                     .font(.caption)
                 }
                 .buttonStyle(.link)
-                .help("Dort lässt sich festlegen, an welcher Kante der unsichtbare Monitor liegt und wohin die Maus ihn verlässt.")
+                .help("There you can define which edge the invisible display sits on and where the pointer leaves it.")
             case .display:
-                Picker("Quellmonitor", selection: sourceDisplayBinding) {
-                    Text("Bitte auswählen")
+                Picker("Source display", selection: sourceDisplayBinding) {
+                    Text("Please select")
                         .tag(nil as CGDirectDisplayID?)
                     ForEach(model.sourceDisplays) { display in
                         Text(display.label)
@@ -202,13 +203,13 @@ struct ControlView: View {
                 .pickerStyle(.menu)
                 .disabled(model.isRunning || model.isBusy)
 
-                Text("Spiegelt einen sichtbaren Monitor. Quelle und Ziel dürfen nicht derselbe Monitor sein.")
+                Text("Mirrors a visible display. Source and target must not be the same display.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             case .window:
                 HStack {
-                    Picker("Quellfenster", selection: sourceWindowBinding) {
-                        Text("Bitte auswählen")
+                    Picker("Source window", selection: sourceWindowBinding) {
+                        Text("Please select")
                             .tag(nil as CGWindowID?)
                         ForEach(model.windows) { window in
                             Text(window.label)
@@ -225,7 +226,7 @@ struct ControlView: View {
                         Image(systemName: "arrow.clockwise")
                     }
                     .disabled(model.isRefreshingWindows)
-                    .help("Fensterliste aktualisieren")
+                    .help("Refresh window list")
 
                     if model.isRefreshingWindows {
                         ProgressView()
@@ -233,7 +234,7 @@ struct ControlView: View {
                     }
                 }
 
-                Text("Spiegelt genau ein Fenster, zum Beispiel die Sprecheransicht. Alles bleibt sichtbar und normal bedienbar.")
+                Text("Mirrors exactly one window, for example the presenter view. Everything stays visible and fully usable.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -241,9 +242,9 @@ struct ControlView: View {
     }
 
     private var targetSection: some View {
-        ControlSection(title: "Zielmonitor", systemImage: "display") {
-            Picker("Zielmonitor", selection: displayBinding) {
-                Text("Bitte auswählen")
+        ControlSection(title: "Target display", systemImage: "display") {
+            Picker("Target display", selection: displayBinding) {
+                Text("Please select")
                     .tag(nil as CGDirectDisplayID?)
                 ForEach(model.displays) { display in
                     Text(display.label)
@@ -270,14 +271,14 @@ struct ControlView: View {
 
     private var orientationSection: some View {
         ControlSection(
-            title: "Ausrichtung",
+            title: "Orientation",
             systemImage: "arrow.triangle.2.circlepath"
         ) {
             HStack(alignment: .center, spacing: 14) {
                 OrientationPreview(transform: model.transform)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Picker("Drehung", selection: rotationBinding) {
+                    Picker("Rotation", selection: rotationBinding) {
                         ForEach(DisplayRotation.allCases, id: \.rawValue) {
                             rotation in
                             Text("\(rotation.rawValue)°").tag(rotation)
@@ -288,15 +289,15 @@ struct ControlView: View {
 
                     HStack(spacing: 16) {
                         Toggle(
-                            "Horizontal spiegeln",
+                            "Flip horizontally",
                             isOn: horizontalMirrorBinding
                         )
                         Toggle(
-                            "Vertikal spiegeln",
+                            "Flip vertically",
                             isOn: verticalMirrorBinding
                         )
                         Spacer()
-                        Button("Standard") {
+                        Button("Reset") {
                             model.resetTransform()
                         }
                         .controlSize(.small)
@@ -308,10 +309,10 @@ struct ControlView: View {
     }
 
     private var startupSection: some View {
-        ControlSection(title: "Start", systemImage: "power") {
+        ControlSection(title: "Startup", systemImage: "power") {
             VStack(alignment: .leading, spacing: 6) {
                 Toggle(
-                    "Ausgabe beim App-Start automatisch starten",
+                    "Start output automatically when the app launches",
                     isOn: Binding(
                         get: { model.autoStartOutput },
                         set: { model.setAutoStartOutput($0) }
@@ -320,7 +321,7 @@ struct ControlView: View {
 
                 HStack {
                     Toggle(
-                        "Bei Anmeldung starten",
+                        "Launch at login",
                         isOn: Binding(
                             get: { model.loginItemEnabled },
                             set: { model.setLoginItemEnabled($0) }
@@ -332,7 +333,7 @@ struct ControlView: View {
                             .controlSize(.mini)
                     }
                     if model.loginItemNeedsApproval {
-                        Button("Systemeinstellungen öffnen") {
+                        Button("Open System Settings") {
                             model.openLoginItemsSettings()
                         }
                         .controlSize(.small)
@@ -347,7 +348,7 @@ struct ControlView: View {
 
                 if !model.appIsInApplicationsFolder {
                     Text(
-                        "Für einen zuverlässigen Anmeldestart die signierte App nach /Applications verschieben und dort registrieren."
+                        "For a reliable launch at login, move the signed app to /Applications and register it there."
                     )
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -377,14 +378,14 @@ struct ControlView: View {
 
             if !model.permissionGranted {
                 HStack {
-                    Button("Zugriff anfordern") {
+                    Button("Request access") {
                         model.requestPermission()
                     }
-                    Button("Systemeinstellungen öffnen") {
+                    Button("Open System Settings") {
                         model.openScreenRecordingSettings()
                     }
                     Spacer()
-                    Button("Status prüfen") {
+                    Button("Check status") {
                         model.updatePermissionStatus()
                     }
                 }
@@ -398,7 +399,7 @@ struct ControlView: View {
             Button {
                 model.refreshDisplays()
             } label: {
-                Label("Aktualisieren", systemImage: "arrow.clockwise")
+                Label("Refresh", systemImage: "arrow.clockwise")
             }
             .disabled(model.isBusy)
 
@@ -410,12 +411,12 @@ struct ControlView: View {
             }
 
             if model.isRunning || model.isBusy {
-                Button("Stoppen", role: .destructive) {
+                Button("Stop", role: .destructive) {
                     model.requestStop()
                 }
                 .keyboardShortcut(.cancelAction)
             } else {
-                Button("Ausgabe starten") {
+                Button("Start output") {
                     Task { @MainActor in
                         await model.start()
                     }

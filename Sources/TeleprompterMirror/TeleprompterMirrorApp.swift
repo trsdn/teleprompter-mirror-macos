@@ -14,12 +14,12 @@ final class AppStatusItemController: NSObject, NSMenuDelegate {
             withLength: NSStatusItem.squareLength
         )
         startItem = NSMenuItem(
-            title: "Ausgabe starten",
+            title: "Start Output",
             action: #selector(startOutput),
             keyEquivalent: ""
         )
         stopItem = NSMenuItem(
-            title: "Ausgabe stoppen",
+            title: "Stop Output",
             action: #selector(stopOutput),
             keyEquivalent: "."
         )
@@ -42,7 +42,7 @@ final class AppStatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
 
         let showItem = NSMenuItem(
-            title: "Steuerfenster anzeigen",
+            title: "Show Controls",
             action: #selector(showControls),
             keyEquivalent: ""
         )
@@ -51,7 +51,7 @@ final class AppStatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(
-            title: "Teleprompter Mirror beenden",
+            title: "Quit Teleprompter Mirror",
             action: #selector(quit),
             keyEquivalent: "q"
         )
@@ -83,7 +83,7 @@ final class AppStatusItemController: NSObject, NSMenuDelegate {
 
     @objc
     private func stopOutput() {
-        model?.requestStop(message: "Ausgabe über das Statusmenü beendet.")
+        model?.requestStop(message: "Output stopped from the status menu.")
     }
 
     @objc
@@ -186,15 +186,15 @@ struct TeleprompterMirrorApp: App {
         }
         .windowResizability(.contentSize)
         .commands {
-            CommandMenu("Ausgabe") {
-                Button("Ausgabe starten") {
+            CommandMenu("Output") {
+                Button("Start Output") {
                     Task { @MainActor in
                         await model.start()
                     }
                 }
                 .disabled(!model.canStart)
 
-                Button("Ausgabe stoppen") {
+                Button("Stop Output") {
                     model.requestStop()
                 }
                 .keyboardShortcut(".", modifiers: [.command])
@@ -202,11 +202,11 @@ struct TeleprompterMirrorApp: App {
 
                 Divider()
 
-                Button("Steuerfenster anzeigen") {
+                Button("Show Controls") {
                     appDelegate.showControls()
                 }
 
-                Button("Monitore aktualisieren") {
+                Button("Refresh Displays") {
                     model.refreshDisplays()
                 }
                 .keyboardShortcut("r", modifiers: [.command])

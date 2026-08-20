@@ -10,7 +10,7 @@ enum CapturePipelineError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case let .invalidSourceGeometry(width, height):
-            return "Ungültige Capture-Größe \(width)×\(height)."
+            return "Invalid capture size \(width)×\(height)."
         }
     }
 }
@@ -45,7 +45,7 @@ private final class CaptureStreamBridge: NSObject, @unchecked Sendable,
         if !loggedFirstCallback {
             loggedFirstCallback = true
             NSLog(
-                "Erster ScreenCaptureKit-Callback: Typ=%ld",
+                "First ScreenCaptureKit callback: type=%ld",
                 outputType.rawValue
             )
         }
@@ -71,7 +71,7 @@ private final class CaptureStreamBridge: NSObject, @unchecked Sendable,
         if !loggedFirstCompleteFrame {
             loggedFirstCompleteFrame = true
             NSLog(
-                "Erster vollständiger ScreenCaptureKit-Frame: %dx%d, Pixelformat %u",
+                "First complete ScreenCaptureKit frame: %dx%d, pixel format %u",
                 CVPixelBufferGetWidth(pixelBuffer),
                 CVPixelBufferGetHeight(pixelBuffer),
                 CVPixelBufferGetPixelFormatType(pixelBuffer)
@@ -92,8 +92,8 @@ private final class CaptureStreamBridge: NSObject, @unchecked Sendable,
         lock.unlock()
 
         NSLog(
-            "ScreenCaptureKit-Stream beendet%@ : %@",
-            expected ? " (angefordert)" : "",
+            "ScreenCaptureKit stream stopped%@ : %@",
+            expected ? " (requested)" : "",
             error.localizedDescription
         )
         if !expected {
@@ -272,7 +272,7 @@ final class CaptureSession {
         } catch {
             let startError = error
             NSLog(
-                "ScreenCaptureKit-Stream konnte nicht gestartet werden: %@",
+                "Could not start ScreenCaptureKit stream: %@",
                 error.localizedDescription
             )
             teardownAfterStartFailure()
@@ -320,7 +320,7 @@ final class CaptureSession {
             } catch {
                 firstError = error
                 NSLog(
-                    "ScreenCaptureKit-Stream konnte nicht gestoppt werden: %@",
+                    "Could not stop ScreenCaptureKit stream: %@",
                     error.localizedDescription
                 )
             }
@@ -335,7 +335,7 @@ final class CaptureSession {
                     firstError = error
                 }
                 NSLog(
-                    "ScreenCaptureKit-Ausgabe konnte nicht entfernt werden: %@",
+                    "Could not remove ScreenCaptureKit output: %@",
                     error.localizedDescription
                 )
             }
@@ -356,7 +356,7 @@ final class CaptureSession {
                 try stream.removeStreamOutput(streamOutput, type: .screen)
             } catch {
                 NSLog(
-                    "ScreenCaptureKit-Ausgabe nach Startfehler nicht entfernbar: %@",
+                    "Could not remove ScreenCaptureKit output after start failure: %@",
                     error.localizedDescription
                 )
             }

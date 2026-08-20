@@ -235,9 +235,9 @@ iconutil.arguments = [
 try iconutil.run()
 iconutil.waitUntilExit()
 guard iconutil.terminationStatus == 0 else {
-    FileHandle.standardError.write(Data("iconutil ist fehlgeschlagen.\n".utf8))
+    FileHandle.standardError.write(Data("iconutil failed.\n".utf8))
     exit(1)
 }
 
 try FileManager.default.removeItem(at: iconset)
-print("Resources/AppIcon.icns wurde erzeugt.")
+print("Resources/AppIcon.icns was generated.")

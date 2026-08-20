@@ -24,15 +24,15 @@ enum VirtualDisplayHostError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .executableUnavailable:
-            return "Die ausführbare App-Datei wurde nicht gefunden."
+            return "The application executable could not be found."
         case let .launchFailed(message):
-            return "Der Display-Host konnte nicht gestartet werden: \(message)"
+            return "The display host could not be started: \(message)"
         case let .exitedBeforeReady(status):
-            return "Der Display-Host wurde vorzeitig beendet (Status \(status))."
+            return "The display host exited before it was ready (status \(status))."
         case let .invalidResponse(response):
-            return "Der Display-Host meldete eine ungültige Antwort: \(response)"
+            return "The display host reported an invalid response: \(response)"
         case .startupTimedOut:
-            return "Der Display-Host wurde nicht rechtzeitig bereit."
+            return "The display host did not become ready in time."
         }
     }
 }
@@ -76,7 +76,7 @@ final class VirtualDisplayHostProcess {
     func start() async throws -> CGDirectDisplayID {
         guard !started else {
             throw VirtualDisplayHostError.launchFailed(
-                "Der Prozess wurde bereits verwendet."
+                "The process has already been used."
             )
         }
         guard let executableURL = Bundle.main.executableURL else {

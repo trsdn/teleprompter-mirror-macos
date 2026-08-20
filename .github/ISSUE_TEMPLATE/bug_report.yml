@@ -1,29 +1,29 @@
-name: Fehler melden
-description: Ein reproduzierbares Fehlverhalten der App melden.
-title: "[Fehler]: "
+name: Report a bug
+description: Report reproducible app misbehavior.
+title: "[Bug]: "
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        Danke für den Bericht. Bitte fülle die Felder möglichst vollständig aus –
-        vor allem Quelle, Zielmonitor und macOS-Version sind für die Analyse wichtig.
+        Thank you for the report. Please fill out the fields as completely as possible —
+        source, target display, and macOS version are especially important for analysis.
 
   - type: textarea
     id: description
     attributes:
-      label: Beschreibung
-      description: Was passiert, und was hättest du stattdessen erwartet?
+      label: Description
+      description: What happens, and what did you expect instead?
     validations:
       required: true
 
   - type: textarea
     id: steps
     attributes:
-      label: Schritte zur Reproduktion
+      label: Steps to reproduce
       placeholder: |
-        1. App starten
-        2. Quelle „Monitor“ wählen
+        1. Start the app
+        2. Choose source "Display"
         3. …
     validations:
       required: true
@@ -31,43 +31,43 @@ body:
   - type: dropdown
     id: source
     attributes:
-      label: Verwendete Quelle
+      label: Source used
       options:
-        - Virtueller Monitor
-        - Monitor
-        - Fenster
-        - Trifft nicht zu / unbekannt
+        - Virtual display
+        - Display
+        - Window
+        - Not applicable / unknown
     validations:
       required: true
 
   - type: input
     id: macos
     attributes:
-      label: macOS-Version
-      placeholder: "z. B. 15.3 oder 26.0"
+      label: macOS version
+      placeholder: "e.g. 15.3 or 26.0"
     validations:
       required: true
 
   - type: input
     id: hardware
     attributes:
-      label: Mac-Modell und Monitor-Aufbau
-      placeholder: "z. B. MacBook Pro M3 mit einem externen 1920×1080-Monitor"
+      label: Mac model and display setup
+      placeholder: "e.g. MacBook Pro M3 with one external 1920×1080 display"
     validations:
       required: true
 
   - type: input
     id: version
     attributes:
-      label: App-Version
-      description: Steht im Info-Dialog bzw. in `Config/Info.plist`.
-      placeholder: "z. B. 1.0.1 (2)"
+      label: App version
+      description: Shown in the About dialog or in `Config/Info.plist`.
+      placeholder: "e.g. 1.0.1 (2)"
 
   - type: textarea
     id: logs
     attributes:
-      label: Protokollausgabe
+      label: Log output
       description: |
-        Optional, hilft aber sehr:
+        Optional, but very helpful:
         `log show --last 5m --predicate 'subsystem == "com.github.trsdn.TeleprompterMirror"' --style compact`
       render: text

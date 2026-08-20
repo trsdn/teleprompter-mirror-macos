@@ -1,39 +1,37 @@
-# Sicherheitsrichtlinie
+# Security Policy
 
-## Unterstützte Versionen
+## Supported versions
 
-Sicherheitskorrekturen erscheinen für die jeweils neueste Veröffentlichung.
-Ältere Versionen werden nicht gepflegt.
+Security fixes are released for the latest release.
+Older versions are not maintained.
 
-## Schwachstelle melden
+## Reporting a vulnerability
 
-Bitte melde Schwachstellen **nicht** über ein öffentliches Issue.
+Please do **not** report vulnerabilities through a public issue.
 
-Nutze stattdessen die private Meldefunktion von GitHub:
-[Security Advisory melden](https://github.com/trsdn/teleprompter-mirror-macos/security/advisories/new).
+Instead, use GitHub's private reporting feature:
+[Report Security Advisory](https://github.com/trsdn/teleprompter-mirror-macos/security/advisories/new).
 
-Hilfreich für die Analyse sind:
+Helpful information for the analysis includes:
 
-- betroffene App-Version und macOS-Version,
-- eine Beschreibung der Auswirkung,
-- eine möglichst knappe Reproduktion.
+- affected app version and macOS version,
+- a description of the impact,
+- the briefest possible reproduction.
 
-Du erhältst in der Regel innerhalb von sieben Tagen eine Rückmeldung.
+You will usually receive a response within seven days.
 
-## Sicherheitsrelevanter Kontext
+## Security-relevant context
 
-Für die Bewertung von Meldungen ist folgender Aufbau relevant:
+The following architecture is relevant for evaluating reports:
 
-- Die App benötigt die Berechtigung **Bildschirmaufnahme**. Aufgenommene Bilder
-  werden ausschließlich lokal verarbeitet und auf einem Monitor angezeigt. Es
-  gibt keine Netzwerkkommunikation, keine Telemetrie und keine Speicherung von
-  Bildinhalten auf der Festplatte.
-- Im Modus **Virtueller Monitor** startet die App eine zweite Instanz derselben
-  signierten Binary als headless Display-Host. Gestartet wird ausschließlich der
-  eigene Bundle-Pfad; es werden keine externen Programme ausgeführt.
-- Der Zugriff auf die privaten CoreGraphics-Klassen erfolgt dynamisch über
-  `NSClassFromString`, ohne Linken privater Symbole.
-- Einstellungen liegen unverändert in den `UserDefaults` der App. Es werden
-  keine Zugangsdaten oder personenbezogenen Daten gespeichert.
-- Die Bundles werden mit „Developer ID“ und aktivierter Hardened Runtime
-  signiert.
+- The app requires **Screen Recording** permission. Captured images are processed
+  exclusively locally and displayed on a display. There is no network
+  communication, no telemetry, and no storage of image content on disk.
+- In **Virtual display** mode, the app starts a second instance of the same
+  signed binary as a headless display host. Only its own bundle path is started;
+  no external programs are executed.
+- Access to the private CoreGraphics classes happens dynamically through
+  `NSClassFromString`, without linking private symbols.
+- Settings remain unchanged in the app's `UserDefaults`. No credentials or
+  personal data are stored.
+- The bundles are signed with "Developer ID" and enabled Hardened Runtime.

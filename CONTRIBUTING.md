@@ -1,80 +1,80 @@
-# Mitwirken
+# Contributing
 
-Danke für dein Interesse an Teleprompter Mirror. Dieses Projekt ist bewusst
-klein gehalten – bitte lies vor größeren Änderungen den Abschnitt
-[Projektumfang](#projektumfang).
+Thank you for your interest in Teleprompter Mirror. This project is
+intentionally kept small — please read the [Project scope](#project-scope)
+section before making larger changes.
 
-## Voraussetzungen
+## Requirements
 
-- macOS 13 oder neuer (entwickelt und getestet auf aktuellen Versionen)
-- Xcode-Kommandozeilenwerkzeuge mit Swift 6.1 oder neuer
-  (`swift-tools-version: 6.1`, siehe `Package.swift`)
-- Für signierte Builds: ein „Developer ID Application“- oder
-  „Apple Development“-Zertifikat im Schlüsselbund
+- macOS 13 or newer (developed and tested on current versions)
+- Xcode Command Line Tools with Swift 6.1 or newer
+  (`swift-tools-version: 6.1`, see `Package.swift`)
+- For signed builds: a "Developer ID Application" or "Apple Development"
+  certificate in the keychain
 
-Es gibt keine Drittanbieter-Abhängigkeiten. `swift build` genügt.
+There are no third-party dependencies. `swift build` is enough.
 
-## Entwicklungsablauf
+## Development workflow
 
 ```bash
-swift build          # übersetzen
-swift test           # Unit-Tests ausführen
-./build-app.sh       # signiertes .app-Bundle nach dist/ erzeugen
+swift build          # build
+swift test           # run unit tests
+./build-app.sh       # create signed .app bundle in dist/
 ```
 
-Das App-Icon wird aus Code erzeugt und liegt als `Resources/AppIcon.icns` im
-Repository. Nach Änderungen an `Scripts/make-icon.swift` neu generieren:
+The app icon is generated from code and is present in the repository as
+`Resources/AppIcon.icns`. Regenerate it after changes to
+`Scripts/make-icon.swift`:
 
 ```bash
 swift Scripts/make-icon.swift
 ```
 
-Für einen Rauchtest ohne echten Zielmonitor gibt es einen Selbsttest:
+There is a self-test for a smoke test without a real target display:
 
 ```bash
 open "dist/Teleprompter Mirror.app" --args --self-test
 ```
 
-Er meldet `SELF_TEST_PASS`, wenn Capture-Aufbau und Ausgabe funktionieren.
+It reports `SELF_TEST_PASS` when capture setup and output work.
 
-## Vor dem Pull Request
+## Before the pull request
 
-- `swift build` läuft ohne Warnungen durch.
-- `swift test` ist grün.
-- Die Änderung wurde mit mindestens einer Quelle manuell geprüft.
-- Verhaltensänderungen sind in der `README.md` beschrieben.
+- `swift build` completes without warnings.
+- `swift test` is green.
+- The change was checked manually with at least one source.
+- Behavior changes are described in `README.md`.
 
-## Konventionen
+## Conventions
 
-- **Sprache:** Alle Texte, die Nutzende sehen – UI-Beschriftungen, Statusmeldungen,
-  Fehlermeldungen, Skriptausgaben – sind auf **Deutsch**. Code-Kommentare und
-  Symbolnamen sind auf **Englisch**.
+- **Language:** All user-facing text, code comments, and commit messages are in
+  **English**. Symbol names are in **English**.
 - **Commits:** [Conventional Commits](https://www.conventionalcommits.org/),
-  Betreffzeile auf Deutsch, z. B. `fix: Ausgabe überdeckt die Menüleiste`.
-- **Formatierung:** Vier Leerzeichen Einrückung, Zeilenlänge 80 Zeichen als
-  Richtwert.
-- **Abhängigkeiten:** Keine. Wenn eine Aufgabe ohne fremdes Paket lösbar ist,
-  wird sie ohne gelöst.
-- **Private APIs:** Der Zugriff auf `CGVirtualDisplay` und Verwandte erfolgt
-  ausschließlich über `NSClassFromString` in `Sources/VirtualDisplayBridge`.
-  Private Symbole werden nicht gelinkt.
+  subject line in English, for example `fix: keep output above the menu bar`.
+- **Formatting:** Four spaces for indentation, line length of 80 characters as
+  a guideline.
+- **Dependencies:** None. If a task can be solved without an external package,
+  it is solved without one.
+- **Private APIs:** Access to `CGVirtualDisplay` and related APIs happens
+  exclusively through `NSClassFromString` in `Sources/VirtualDisplayBridge`.
+  Private symbols are not linked.
 
-## Projektumfang
+## Project scope
 
-Die App macht genau eines: eine Quelle erfassen, das Bild spiegeln bzw. drehen
-und es vollflächig auf einem Zielmonitor ausgeben – bei möglichst geringem
-Ressourcenverbrauch.
+The app does exactly one thing: capture a source, mirror or rotate the image,
+and output it full-screen on a target display — with the lowest possible
+resource usage.
 
-Ausdrücklich **nicht** Teil des Projekts sind Texteditor, Skriptverwaltung,
-Laufschrift, Fernsteuerung und Aufzeichnung. Für solche Funktionen gibt es
-spezialisierte Teleprompter-Anwendungen.
+Text editor, script management, scrolling text, remote control, and recording
+are explicitly **not** part of the project. Specialized teleprompter
+applications exist for such functions.
 
-## Fehler melden
+## Reporting bugs
 
-Bitte nutze die [Issue-Vorlagen](https://github.com/trsdn/teleprompter-mirror-macos/issues/new/choose).
-Sicherheitsrelevante Funde bitte **nicht** als Issue anlegen, sondern wie in
-[SECURITY.md](SECURITY.md) beschrieben melden.
+Please use the [issue templates](https://github.com/trsdn/teleprompter-mirror-macos/issues/new/choose).
+Please do **not** create an issue for security-relevant findings; report them as
+described in [SECURITY.md](SECURITY.md).
 
-## Umgang miteinander
+## Working together
 
-Für alle Projektbereiche gilt der [Verhaltenskodex](CODE_OF_CONDUCT.md).
+The [Code of Conduct](CODE_OF_CONDUCT.md) applies to all project areas.

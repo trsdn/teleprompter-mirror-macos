@@ -4,7 +4,7 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleDevelopmentRegion</key>
-    <string>de</string>
+    <string>en</string>
     <key>CFBundleDisplayName</key>
     <string>Teleprompter Mirror</string>
     <key>CFBundleExecutable</key>
@@ -36,6 +36,6 @@
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
     <key>NSScreenCaptureUsageDescription</key>
-    <string>Teleprompter Mirror benötigt Bildschirmaufnahmezugriff, um die gewählte Quelle – einen privaten virtuellen Monitor, einen angeschlossenen Monitor oder ein einzelnes Fenster – zu erfassen und deren Inhalt gespiegelt bzw. gedreht auf dem gewählten Zielmonitor anzuzeigen.</string>
+    <string>Teleprompter Mirror needs screen recording access to capture the selected source - a private virtual display, a connected display or a single window - and to show its content mirrored or rotated on the selected target display.</string>
 </dict>
 </plist>
