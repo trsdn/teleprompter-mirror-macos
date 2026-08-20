@@ -129,6 +129,9 @@ im physischen Aufbau korrekt orientiert ist.
 1. Unter **Quelle** die Art wählen: **Virtueller Monitor**, **Monitor** oder
    **Fenster**. Bei Monitor bzw. Fenster zusätzlich den konkreten Eintrag
    auswählen; die Fensterliste lässt sich mit dem Pfeilsymbol aktualisieren.
+   Im virtuellen Modus führt **Anordnung in den Bildschirmeinstellungen …**
+   direkt zur Systemeinstellung, in der festgelegt wird, an welcher Kante der
+   unsichtbare Monitor liegt und wohin die Maus ihn verlässt.
 2. Den physischen **Zielmonitor** für die Ausgabe auswählen (Vorgabe: **AAA**,
    sonst der kleinste externe Monitor). Der Zielmonitor kann nie zugleich
    Quelle sein.

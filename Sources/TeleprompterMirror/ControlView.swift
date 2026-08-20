@@ -177,6 +177,18 @@ struct ControlView: View {
                 Text("Erzeugt einen unsichtbaren Monitor „\(model.virtualSourceName)“. Fenster müssen blind dorthin verschoben werden; sichtbar wird er nur als gespiegeltes Bild auf dem Zielmonitor.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+
+                Button {
+                    model.openDisplaySettings()
+                } label: {
+                    Label(
+                        "Anordnung in den Bildschirmeinstellungen …",
+                        systemImage: "arrow.up.forward.app"
+                    )
+                    .font(.caption)
+                }
+                .buttonStyle(.link)
+                .help("Dort lässt sich festlegen, an welcher Kante der unsichtbare Monitor liegt und wohin die Maus ihn verlässt.")
             case .display:
                 Picker("Quellmonitor", selection: sourceDisplayBinding) {
                     Text("Bitte auswählen")

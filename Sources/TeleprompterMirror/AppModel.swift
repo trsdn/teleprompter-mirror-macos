@@ -512,6 +512,21 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Opens the display arrangement, which is the only place where the
+    /// invisible virtual monitor can be positioned relative to the physical
+    /// ones. Uses the macOS 13+ settings extension identifier.
+    func openDisplaySettings() {
+        guard let url = URL(
+            string: "x-apple.systempreferences:com.apple.Displays-Settings.extension"
+        ), NSWorkspace.shared.open(url) else {
+            setStatus(
+                "Die Bildschirmeinstellungen konnten nicht geöffnet werden.",
+                isError: true
+            )
+            return
+        }
+    }
+
     func refreshLoginItemStatus() {
         let status = SMAppService.mainApp.status
         loginItemNeedsApproval = false
