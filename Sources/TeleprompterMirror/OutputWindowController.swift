@@ -22,7 +22,7 @@ final class OutputWindowController {
     private var isVisible = false
 
     init(
-        snapshot: ResolvedDisplaySnapshot,
+        snapshot: ResolvedCaptureSnapshot,
         transform: DisplayTransform,
         onFirstFrame: ((RenderingPath) -> Void)? = nil,
         onFailure: ((String) -> Void)? = nil

@@ -361,22 +361,147 @@ public enum DisplayIdentityMatcher {
     }
 }
 
+/// Where the mirrored image comes from. The private virtual display stays the
+/// default for a classic teleprompter setup, but an existing physical display
+/// or a single window can be mirrored instead — the latter two need no private
+/// API and stay fully visible while working.
+public enum CaptureSourceKind: String, Codable, CaseIterable, Sendable {
+    case virtualDisplay
+    case display
+    case window
+
+    public var localizedName: String {
+        switch self {
+        case .virtualDisplay:
+            return "Virtueller Monitor"
+        case .display:
+            return "Monitor"
+        case .window:
+            return "Fenster"
+        }
+    }
+}
+
+/// A window is identified by its owning application plus its title. Window IDs
+/// are per-launch handles and are therefore never persisted.
+public struct WindowIdentity: Codable, Equatable, Hashable, Sendable {
+    public let bundleIdentifier: String?
+    public let applicationName: String
+    public let title: String?
+
+    public init(
+        bundleIdentifier: String?,
+        applicationName: String,
+        title: String?
+    ) {
+        self.bundleIdentifier = bundleIdentifier?.nilIfEmpty
+        self.applicationName = applicationName
+        self.title = title?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+    }
+
+    public var localizedName: String {
+        guard let title else {
+            return applicationName
+        }
+        return "\(applicationName) — \(title)"
+    }
+}
+
+public enum WindowIdentityMatcher {
+    /// Returns an index only when exactly one candidate is the best match, so
+    /// an ambiguous set of same-titled windows never selects one at random.
+    public static func uniqueMatch(
+        for stored: WindowIdentity,
+        among candidates: [WindowIdentity]
+    ) -> Int? {
+        let scored = candidates.enumerated().compactMap { index, candidate in
+            score(stored: stored, candidate: candidate).map {
+                (index: index, score: $0)
+            }
+        }
+        guard let bestScore = scored.map(\.score).max() else {
+            return nil
+        }
+        let best = scored.filter { $0.score == bestScore }
+        return best.count == 1 ? best[0].index : nil
+    }
+
+    private static func score(
+        stored: WindowIdentity,
+        candidate: WindowIdentity
+    ) -> Int? {
+        if let storedBundle = stored.bundleIdentifier,
+           let candidateBundle = candidate.bundleIdentifier,
+           storedBundle != candidateBundle {
+            return nil
+        }
+        if stored.bundleIdentifier == nil || candidate.bundleIdentifier == nil,
+           stored.applicationName != candidate.applicationName {
+            return nil
+        }
+        if let storedTitle = stored.title {
+            guard let candidateTitle = candidate.title else {
+                return 100
+            }
+            return storedTitle == candidateTitle ? 300 : 100
+        }
+        return 200
+    }
+}
+
+public struct CaptureSourceSelection: Codable, Equatable, Sendable {
+    public var kind: CaptureSourceKind
+    /// Remembered physical source display; only used when `kind == .display`.
+    public var display: PersistentDisplayIdentity?
+    /// Remembered window; only used when `kind == .window`.
+    public var window: WindowIdentity?
+
+    public init(
+        kind: CaptureSourceKind = .virtualDisplay,
+        display: PersistentDisplayIdentity? = nil,
+        window: WindowIdentity? = nil
+    ) {
+        self.kind = kind
+        self.display = display
+        self.window = window
+    }
+
+    public static let virtualDisplay = CaptureSourceSelection()
+
+    /// True when the selection carries everything the chosen kind needs.
+    public var isComplete: Bool {
+        switch kind {
+        case .virtualDisplay:
+            return true
+        case .display:
+            return display != nil
+        case .window:
+            return window != nil
+        }
+    }
+}
+
 public struct TeleprompterConfiguration: Codable, Equatable, Sendable {
+    /// What is captured and mirrored.
+    public var source: CaptureSourceSelection
     /// The physical display that shows the transformed teleprompter image.
-    /// The capture source is always the private virtual display, so only the
-    /// target has to be remembered.
     public var target: PersistentDisplayIdentity?
     public var transform: DisplayTransform
 
     public init(
+        source: CaptureSourceSelection = .virtualDisplay,
         target: PersistentDisplayIdentity? = nil,
         transform: DisplayTransform = .teleprompterDefault
     ) {
+        self.source = source
         self.target = target
         self.transform = transform
     }
 
     private enum CodingKeys: String, CodingKey {
+        case source
         case target
         case display
         case transform
@@ -384,18 +509,23 @@ public struct TeleprompterConfiguration: Codable, Equatable, Sendable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        // Presets saved by the earlier same-display build stored the physical
-        // display under `display`; reuse it as the target so upgrades keep the
-        // user's monitor choice.
         let target = try container.decodeIfPresent(
             PersistentDisplayIdentity.self,
             forKey: .target
         )
-        let legacy = try container.decodeIfPresent(
+        // Two earlier builds stored a bare display identity under `display`:
+        // the same-display build meant the output target, the virtual-source
+        // build did not write it at all. Decoding it as the target preserves
+        // the user's monitor choice; a modern `source` object wins.
+        let legacyDisplay = try? container.decodeIfPresent(
             PersistentDisplayIdentity.self,
             forKey: .display
         )
-        self.target = target ?? legacy
+        self.target = target ?? legacyDisplay
+        source = try container.decodeIfPresent(
+            CaptureSourceSelection.self,
+            forKey: .source
+        ) ?? .virtualDisplay
         transform = try container.decodeIfPresent(
             DisplayTransform.self,
             forKey: .transform
@@ -404,6 +534,7 @@ public struct TeleprompterConfiguration: Codable, Equatable, Sendable {
 
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(source, forKey: .source)
         try container.encodeIfPresent(target, forKey: .target)
         try container.encode(transform, forKey: .transform)
     }
@@ -421,37 +552,27 @@ public struct TeleprompterConfiguration: Codable, Equatable, Sendable {
     }
 }
 
-public struct PresetSlot: Codable, Equatable, Sendable {
-    public var name: String
-    public var configuration: TeleprompterConfiguration
-
-    public init(
-        name: String,
-        configuration: TeleprompterConfiguration = .init()
-    ) {
-        self.name = name
-        self.configuration = configuration
-    }
+/// Legacy container for the three preset slots written by schema version 1.
+/// Only used to migrate an existing installation to the single configuration.
+private struct LegacyPresetSlot: Codable {
+    var name: String?
+    var configuration: TeleprompterConfiguration?
 }
 
 public struct AppSettings: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 1
-    public static let presetCount = 3
+    public static let currentSchemaVersion = 2
 
     public var schemaVersion: Int
-    public var activePresetIndex: Int
-    public var presets: [PresetSlot]
+    public var configuration: TeleprompterConfiguration
     public var autoStartOutput: Bool
 
     public init(
         schemaVersion: Int = currentSchemaVersion,
-        activePresetIndex: Int = 0,
-        presets: [PresetSlot] = AppSettings.defaultPresets,
+        configuration: TeleprompterConfiguration = .init(),
         autoStartOutput: Bool = false
     ) {
         self.schemaVersion = schemaVersion
-        self.activePresetIndex = activePresetIndex
-        self.presets = presets
+        self.configuration = configuration
         self.autoStartOutput = autoStartOutput
     }
 
@@ -459,31 +580,69 @@ public struct AppSettings: Codable, Equatable, Sendable {
         AppSettings()
     }
 
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case configuration
+        case activePresetIndex
+        case presets
+        case autoStartOutput
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try container.decodeIfPresent(
+            Int.self,
+            forKey: .schemaVersion
+        ) ?? 1
+        autoStartOutput = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .autoStartOutput
+        ) ?? false
+
+        if let configuration = try container.decodeIfPresent(
+            TeleprompterConfiguration.self,
+            forKey: .configuration
+        ) {
+            self.configuration = configuration
+            return
+        }
+
+        // Schema version 1 stored three slots; carry over the one that was
+        // active so an upgrade keeps the setup the user last worked with.
+        let presets = try container.decodeIfPresent(
+            [LegacyPresetSlot].self,
+            forKey: .presets
+        ) ?? []
+        let index = try container.decodeIfPresent(
+            Int.self,
+            forKey: .activePresetIndex
+        ) ?? 0
+        let active = presets.indices.contains(index)
+            ? presets[index].configuration
+            : presets.compactMap(\.configuration).first
+        configuration = active ?? TeleprompterConfiguration()
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(Self.currentSchemaVersion, forKey: .schemaVersion)
+        try container.encode(configuration, forKey: .configuration)
+        try container.encode(autoStartOutput, forKey: .autoStartOutput)
+    }
+
     public func normalized() -> AppSettings {
         var result = self
         result.schemaVersion = Self.currentSchemaVersion
-        result.presets = Array(result.presets.prefix(Self.presetCount))
-        while result.presets.count < Self.presetCount {
-            let index = result.presets.count
-            result.presets.append(
-                PresetSlot(name: "Preset \(index + 1)")
-            )
+        switch result.configuration.source.kind {
+        case .virtualDisplay:
+            result.configuration.source.display = nil
+            result.configuration.source.window = nil
+        case .display:
+            result.configuration.source.window = nil
+        case .window:
+            result.configuration.source.display = nil
         }
-        for index in result.presets.indices {
-            if result.presets[index].name
-                .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                result.presets[index].name = "Preset \(index + 1)"
-            }
-        }
-        result.activePresetIndex = min(
-            max(result.activePresetIndex, 0),
-            Self.presetCount - 1
-        )
         return result
-    }
-
-    public static var defaultPresets: [PresetSlot] {
-        (1 ... presetCount).map { PresetSlot(name: "Preset \($0)") }
     }
 }
 

@@ -1,26 +1,37 @@
 # Teleprompter Mirror
 
 Teleprompter Mirror ist eine eigenständige native macOS-App für einen
-Teleprompter- oder Spiegelglas-Aufbau. Sie erzeugt einen **privaten virtuellen
-Quellmonitor**, erfasst diesen mit ScreenCaptureKit, spiegelt bzw. dreht das
-Bild und zeigt das Ergebnis vollflächig auf einem **physischen Zielmonitor**.
-Das Seitenverhältnis bleibt erhalten; freie Flächen sind schwarz.
+Teleprompter- oder Spiegelglas-Aufbau. Sie erfasst eine wählbare Quelle mit
+ScreenCaptureKit, spiegelt bzw. dreht das Bild und zeigt das Ergebnis
+vollflächig auf einem **physischen Zielmonitor**. Das Seitenverhältnis bleibt
+erhalten; freie Flächen sind schwarz.
 
-Die Präsentation (PowerPoint, Keynote, Browser …) wird auf den virtuellen
-Quellmonitor gelegt; der physische Zielmonitor – standardmäßig ein Monitor
-namens **AAA**, sofern vorhanden – zeigt den gespiegelten/gedrehten Stream.
-Weil Quelle und Ziel getrennt sind, verdeckt die Vollbildausgabe die Quelle
-nicht und es entsteht keine optische Endlosschleife.
+Als Quelle stehen drei Arten zur Verfügung:
 
-Es gibt keine Drittanbieterpakete oder dauerhaft installierten Daemons. Eine
-zweite Instanz derselben signierten Binary läuft während der App-Laufzeit
-headless als lokaler Display-Host.
+| Quelle | Beschreibung | Wann sinnvoll |
+| --- | --- | --- |
+| **Virtueller Monitor** | Erzeugt einen unsichtbaren Monitor „Teleprompter Source“. | Wenn die Sprecheransicht auf keinem sichtbaren Monitor liegen soll. |
+| **Monitor** | Spiegelt einen sichtbaren physischen Monitor. Quelle und Ziel dürfen nicht identisch sein. | Wenn ein vorhandener Monitor bedienbar bleiben soll. |
+| **Fenster** | Spiegelt genau ein Fenster, z. B. die PowerPoint-Sprecheransicht. | Der einfachste Weg: alles bleibt sichtbar und normal bedienbar. |
 
-## Warum ein virtueller Quellmonitor
+Der physische Zielmonitor – standardmäßig ein Monitor namens **AAA**, sofern
+vorhanden – zeigt den gespiegelten/gedrehten Stream. Weil Quelle und Ziel
+getrennt sind, verdeckt die Vollbildausgabe die Quelle nicht und es entsteht
+keine optische Endlosschleife.
+
+Diese App vereint den früheren *Display Transformer* (Monitorquelle) und
+*Teleprompter Mirror* (virtuelle Quelle) in einem Programm und ergänzt den
+Fenstermodus.
+
+Es gibt keine Drittanbieterpakete oder dauerhaft installierten Daemons. Nur im
+Modus **Virtueller Monitor** läuft während der App-Laufzeit eine zweite Instanz
+derselben signierten Binary headless als lokaler Display-Host.
+
+## Der virtuelle Quellmonitor
 
 Eine Aufnahme desselben physischen Monitors, auf dem auch die Vollbildausgabe
-liegt, ist nicht sinnvoll: Die Ausgabe überdeckt die Quelle. Deshalb erzeugt
-die App über die **private CoreGraphics-API** (`CGVirtualDisplay`,
+liegt, ist nicht sinnvoll: Die Ausgabe überdeckt die Quelle. Deshalb kann die
+App über die **private CoreGraphics-API** (`CGVirtualDisplay`,
 `CGVirtualDisplayDescriptor`, `CGVirtualDisplaySettings`,
 `CGVirtualDisplayMode`) einen synthetischen Monitor „Teleprompter Source“ mit
 `1920×1080@60`.
@@ -38,8 +49,8 @@ die App über die **private CoreGraphics-API** (`CGVirtualDisplay`,
 - Der Display-Host beendet sich zusammen mit dem Hauptprozess; der virtuelle
   Monitor verschwindet dadurch spätestens eine Sekunde nach dem App-Ende.
 - Der virtuelle Monitor erhält eine stabile synthetische Kennung
-  (Hersteller/Produkt/Seriennummer) und sRGB-Primärfarben, damit ein Preset
-  ihn nicht mit echter Hardware verwechselt.
+  (Hersteller/Produkt/Seriennummer) und sRGB-Primärfarben, damit die
+  Konfiguration ihn nicht mit echter Hardware verwechselt.
 
 Der Display-Host meldet die tatsächliche `CGDirectDisplayID` einmalig über
 eine private Pipe an den Hauptprozess. Als Aufnahmequelle dient ausschließlich
@@ -63,9 +74,9 @@ verschoben – niemals auf den unsichtbaren virtuellen Monitor.
 2. Das Glas typischerweise ungefähr im 45°-Winkel vor der Kamera montieren.
 3. Standardmäßig ist **Horizontal spiegeln** bei **0°** aktiv. Je nach
    physischem Aufbau Drehung und vertikale Spiegelung anpassen.
-4. Die Sprecheransicht bzw. Präsentation auf den virtuellen Monitor
-   „Teleprompter Source“ ziehen und die Schriftgröße für den tatsächlichen
-   Kameraabstand wählen.
+4. Eine Quelle wählen: das Fenster der Sprecheransicht (empfohlen), einen
+   weiteren physischen Monitor oder den virtuellen Monitor „Teleprompter
+   Source“. Die Schriftgröße für den tatsächlichen Kameraabstand wählen.
 
 ## Voraussetzungen
 
@@ -104,7 +115,7 @@ kann der signierte Build ohne neuen Berechtigungsdialog getestet werden:
 open "dist/Teleprompter Mirror.app" --args --self-test
 ```
 
-Der Test erstellt den virtuellen Quellmonitor, wählt den Standard-Zielmonitor,
+Der Test erzwingt die virtuelle Quelle, wählt den Standard-Zielmonitor,
 startet die Ausgabe und meldet `SELF_TEST_PASS`, sobald ein vollständiger Frame
 des virtuellen Quellmonitors angenommen wurde und die Ausgabeschicht den
 Rendering-Status meldet – andernfalls `SELF_TEST_FAIL`. Ohne vorhandene
@@ -115,18 +126,23 @@ im physischen Aufbau korrekt orientiert ist.
 
 ## Bedienung
 
-1. Einen der drei Preset-Slots auswählen und bei Bedarf benennen.
+1. Unter **Quelle** die Art wählen: **Virtueller Monitor**, **Monitor** oder
+   **Fenster**. Bei Monitor bzw. Fenster zusätzlich den konkreten Eintrag
+   auswählen; die Fensterliste lässt sich mit dem Pfeilsymbol aktualisieren.
 2. Den physischen **Zielmonitor** für die Ausgabe auswählen (Vorgabe: **AAA**,
-   sonst der kleinste externe Monitor).
-3. Drehung `0°`, `90°`, `180°` oder `270°` sowie horizontale und vertikale
-   Spiegelung einstellen.
-4. **Preset speichern** wählen.
-5. Bildschirmaufnahme erlauben.
-6. Die Präsentation auf den virtuellen Monitor „Teleprompter Source“ ziehen.
-7. **Ausgabe starten** wählen.
+   sonst der kleinste externe Monitor). Der Zielmonitor kann nie zugleich
+   Quelle sein.
+3. Unter **Ausrichtung** Drehung `0°`, `90°`, `180°` oder `270°` sowie
+   horizontale und vertikale Spiegelung einstellen. Die kleine Vorschau zeigt
+   das Ergebnis sofort; **Standard** setzt auf 0° mit horizontaler Spiegelung
+   zurück.
+4. Bildschirmaufnahme erlauben.
+5. **Ausgabe starten** wählen.
 
-Alle freien Flächen bleiben durch proportionale Einpassung schwarz.
-Transformationen können während der Ausgabe geändert werden.
+Es gibt keine Preset-Slots mehr: Jede Änderung wird sofort automatisch
+gespeichert und beim nächsten Start wiederhergestellt. Alle freien Flächen
+bleiben durch proportionale Einpassung schwarz. Transformationen können während
+der Ausgabe geändert werden.
 
 ### Stoppen und Steuerung
 
@@ -145,9 +161,12 @@ ist. Es werden keine globalen Tastatur-Event-Taps installiert.
 
 Die Aufnahme ist auf 30 Hz und `queueDepth = 4` begrenzt. Nur
 ScreenCaptureKit-Screen-Samples mit Frame-Status `complete`, gültigem
-Sample-Buffer und `CVPixelBuffer` werden weitergereicht. Die Capture-Fläche
-entspricht mit BGRA `1920×1080` exakt dem virtuellen Quellmodus; Audio ist aus,
-der Mauszeiger ist sichtbar.
+Sample-Buffer und `CVPixelBuffer` werden weitergereicht. Die Capture-Auflösung
+(BGRA) wird proportional auf höchstens die längste Kante des Zielmonitors
+begrenzt, damit große Quellen wie ein 5120×1440-Monitor nicht unnötig in voller
+Auflösung übertragen werden. Audio ist aus; im Fenstermodus wird der Mauszeiger
+nicht mitaufgenommen. Gemessener Verbrauch im laufenden Betrieb: rund 1–3 % CPU
+und unter 50 MB Arbeitsspeicher.
 
 Der bevorzugte Pfad
 `ScreenCaptureKit → AVSampleBufferDisplayLayer` reicht IOSurface-gestützte
@@ -166,14 +185,19 @@ asymmetrischen L/R-Testbild auf dem physischen Zielmonitor AAA visuell geprüft:
 Das rote `R` erschien links und das gelbe `L` rechts, die horizontale
 Spiegelung war damit korrekt.
 
-## Presets und Monitoridentität
+## Gespeicherte Konfiguration und Monitoridentität
 
-Jeder der drei benannten Presets speichert genau eine **Zielmonitoridentität**
-und die Transformation per `Codable` in `UserDefaults`. Die Quelle ist immer
-der virtuelle Monitor und muss nicht gespeichert werden. Presets aus der
-früheren Version, die noch eine Monitoridentität unter `display` gespeichert
-haben, werden weiterhin als Zielmonitor übernommen. Eine Identität kombiniert,
-soweit verfügbar:
+Die App speichert genau eine Konfiguration per `Codable` in `UserDefaults`:
+Quellenart, gewählte Quelle, **Zielmonitoridentität** und Transformation. Ältere
+Einstellungen mit drei Preset-Slots werden beim ersten Start automatisch auf die
+zuletzt aktive Konfiguration migriert; noch ältere Stände mit einer
+Monitoridentität unter `display` werden weiterhin als Zielmonitor übernommen.
+
+Ein Fenster wird über Bundle-ID, App-Name und Fenstertitel wiedererkannt,
+niemals über die flüchtige `CGWindowID` allein. Mehrdeutige Treffer werden nicht
+automatisch verwendet.
+
+Eine Monitoridentität kombiniert, soweit verfügbar:
 
 - Hersteller-, Produkt- und Seriennummer
 - stabile Display-UUID
@@ -209,7 +233,12 @@ erzeugen.
 - Die App nutzt eine **private, nicht dokumentierte** CoreGraphics-API für den
   virtuellen Monitor. Diese kann sich zwischen macOS-Versionen ändern und ist
   **nicht App-Store-tauglich**. Ist die API nicht verfügbar, meldet die App
-  dies und startet keine Ausgabe.
+  dies und startet keine Ausgabe; Monitor- und Fenstermodus bleiben nutzbar.
+- Der virtuelle Monitor ist blind bedienbar: Er hat eine eigene Menüleiste und
+  ist nur als gespiegeltes Bild sichtbar, weshalb die Maus dort „falsch herum“
+  wirkt. Für interaktive Arbeit sind Monitor- oder Fenstermodus vorzuziehen.
+- Im Fenstermodus endet die Ausgabe, wenn das Quellfenster geschlossen wird.
+  Die App aktualisiert dann automatisch die Fensterliste.
 - Die Spiegelung erfolgt in der Ausgabe-Ebene (Core Animation / Core Image).
   Es findet **kein** physischer Scanout-Flip des Monitors statt; die App kann
   daher nicht garantieren, dass die Orientierung im konkreten Spiegelglas-

@@ -2,28 +2,85 @@ import CoreGraphics
 import SwiftUI
 import TeleprompterCore
 
+/// A titled block of related controls. Keeps the window scannable without
+/// relying on the heavier platform `GroupBox` chrome.
+private struct ControlSection<Content: View>: View {
+    let title: String
+    let systemImage: String
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(title, systemImage: systemImage)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+            content
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+        )
+    }
+}
+
+/// Live illustration of what rotation and mirroring do to the source image,
+/// so the correct teleprompter orientation can be found without guessing.
+private struct OrientationPreview: View {
+    let transform: DisplayTransform
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(Color.black)
+            Text("Fg")
+                .font(.system(size: 26, weight: .bold, design: .serif))
+                .foregroundStyle(.white)
+                .scaleEffect(
+                    x: transform.mirrorHorizontally ? -1 : 1,
+                    y: transform.mirrorVertically ? -1 : 1
+                )
+                .rotationEffect(.degrees(Double(transform.rotation.rawValue)))
+        }
+        .frame(width: 74, height: 52)
+        .accessibilityLabel("Vorschau der Ausrichtung")
+    }
+}
+
 struct ControlView: View {
     @ObservedObject var model: AppModel
     let onAppear: () -> Void
+
+    private var sourceKindBinding: Binding<CaptureSourceKind> {
+        Binding(
+            get: { model.sourceKind },
+            set: { model.selectSourceKind($0) }
+        )
+    }
+
+    private var sourceDisplayBinding: Binding<CGDirectDisplayID?> {
+        Binding(
+            get: { model.selectedSourceDisplayID },
+            set: { model.selectSourceDisplay($0) }
+        )
+    }
+
+    private var sourceWindowBinding: Binding<CGWindowID?> {
+        Binding(
+            get: { model.selectedSourceWindowID },
+            set: { model.selectSourceWindow($0) }
+        )
+    }
 
     private var displayBinding: Binding<CGDirectDisplayID?> {
         Binding(
             get: { model.selectedDisplayID },
             set: { model.selectDisplay($0) }
-        )
-    }
-
-    private var presetBinding: Binding<Int> {
-        Binding(
-            get: { model.activePresetIndex },
-            set: { model.selectPreset($0) }
-        )
-    }
-
-    private var presetNameBinding: Binding<String> {
-        Binding(
-            get: { model.activePresetName },
-            set: { model.renameActivePreset($0) }
         )
     }
 
@@ -62,95 +119,152 @@ struct ControlView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                Image(systemName: "rectangle.on.rectangle.angled")
-                    .font(.title2)
-                    .foregroundStyle(.blue)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Teleprompter Mirror")
-                        .font(.headline)
-                    Text("Virtuellen Quellmonitor gespiegelt auf den Zielmonitor ausgeben")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+            header
+            sourceSection
+            targetSection
+            orientationSection
+            startupSection
+            statusSection
+            actionBar
+        }
+        .padding(16)
+        .frame(width: 560)
+        .onAppear(perform: onAppear)
+    }
+
+    private var header: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "rectangle.on.rectangle.angled")
+                .font(.title2)
+                .foregroundStyle(.blue)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Teleprompter Mirror")
+                    .font(.headline)
+                Text("Monitor, Fenster oder virtuellen Monitor gedreht und gespiegelt ausgeben")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            runningBadge
+        }
+    }
+
+    @ViewBuilder
+    private var runningBadge: some View {
+        if model.isRunning {
+            Label("Ausgabe läuft", systemImage: "dot.radiowaves.left.and.right")
+                .font(.caption.weight(.medium))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Capsule().fill(Color.green.opacity(0.18)))
+                .foregroundStyle(.green)
+        }
+    }
+
+    private var sourceSection: some View {
+        ControlSection(title: "Quelle", systemImage: "square.on.square.dashed") {
+            Picker("Quelle", selection: sourceKindBinding) {
+                ForEach(CaptureSourceKind.allCases, id: \.rawValue) { kind in
+                    Text(kind.localizedName).tag(kind)
                 }
             }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .disabled(model.isBusy)
 
-            Divider()
-
-            VStack(alignment: .leading, spacing: 7) {
-                Picker("Preset", selection: presetBinding) {
-                    ForEach(Array(model.presets.enumerated()), id: \.offset) {
-                        index, preset in
-                        Text(preset.name.isEmpty
-                            ? "Preset \(index + 1)"
-                            : preset.name)
-                            .tag(index)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .disabled(model.isBusy)
-
-                HStack {
-                    TextField("Preset-Name", text: presetNameBinding)
-                        .textFieldStyle(.roundedBorder)
-                    Button("Neu laden") {
-                        model.reloadActivePreset()
-                    }
-                    .disabled(model.isBusy)
-                    Button("Preset speichern") {
-                        model.saveCurrentConfigurationToActivePreset()
-                    }
-                    .disabled(!model.canSavePreset)
-                }
-                .controlSize(.small)
-
-                if model.configurationIsDirty {
-                    Label(
-                        "Ungespeicherte Änderungen",
-                        systemImage: "circle.fill"
-                    )
+            switch model.sourceKind {
+            case .virtualDisplay:
+                Text("Erzeugt einen unsichtbaren Monitor „\(model.virtualSourceName)“. Fenster müssen blind dorthin verschoben werden; sichtbar wird er nur als gespiegeltes Bild auf dem Zielmonitor.")
                     .font(.caption2)
-                    .foregroundStyle(.orange)
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Zielmonitor für die Ausgabe")
-                    .font(.subheadline.weight(.semibold))
-
-                Picker("Zielmonitor", selection: displayBinding) {
+                    .foregroundStyle(.secondary)
+            case .display:
+                Picker("Quellmonitor", selection: sourceDisplayBinding) {
                     Text("Bitte auswählen")
                         .tag(nil as CGDirectDisplayID?)
-                    ForEach(model.displays) { display in
+                    ForEach(model.sourceDisplays) { display in
                         Text(display.label)
                             .tag(display.id as CGDirectDisplayID?)
                     }
                 }
                 .labelsHidden()
                 .pickerStyle(.menu)
-                .frame(maxWidth: .infinity, alignment: .leading)
                 .disabled(model.isRunning || model.isBusy)
 
-                Text("Quelle ist der virtuelle Monitor „Teleprompter Source“. Präsentation bzw. Fenster dorthin verschieben.")
+                Text("Spiegelt einen sichtbaren Monitor. Quelle und Ziel dürfen nicht derselbe Monitor sein.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+            case .window:
+                HStack {
+                    Picker("Quellfenster", selection: sourceWindowBinding) {
+                        Text("Bitte auswählen")
+                            .tag(nil as CGWindowID?)
+                        ForEach(model.windows) { window in
+                            Text(window.label)
+                                .tag(window.id as CGWindowID?)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .disabled(model.isRunning || model.isBusy)
 
-                if let hint = model.displayConnectionHint {
-                    Text(hint)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                    Button {
+                        model.refreshWindows()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .disabled(model.isRefreshingWindows)
+                    .help("Fensterliste aktualisieren")
+
+                    if model.isRefreshingWindows {
+                        ProgressView()
+                            .controlSize(.mini)
+                    }
                 }
-                if let notice = model.singleDisplayNotice {
-                    Label(notice, systemImage: "exclamationmark.triangle")
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
+
+                Text("Spiegelt genau ein Fenster, zum Beispiel die Sprecheransicht. Alles bleibt sichtbar und normal bedienbar.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var targetSection: some View {
+        ControlSection(title: "Zielmonitor", systemImage: "display") {
+            Picker("Zielmonitor", selection: displayBinding) {
+                Text("Bitte auswählen")
+                    .tag(nil as CGDirectDisplayID?)
+                ForEach(model.displays) { display in
+                    Text(display.label)
+                        .tag(display.id as CGDirectDisplayID?)
                 }
             }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .disabled(model.isRunning || model.isBusy)
 
-            VStack(alignment: .leading, spacing: 7) {
-                HStack {
-                    Text("Drehung")
-                        .font(.subheadline.weight(.semibold))
+            if let hint = model.displayConnectionHint {
+                Text(hint)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            if let notice = model.singleDisplayNotice {
+                Label(notice, systemImage: "exclamationmark.triangle")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+            }
+        }
+    }
+
+    private var orientationSection: some View {
+        ControlSection(
+            title: "Ausrichtung",
+            systemImage: "arrow.triangle.2.circlepath"
+        ) {
+            HStack(alignment: .center, spacing: 14) {
+                OrientationPreview(transform: model.transform)
+
+                VStack(alignment: .leading, spacing: 8) {
                     Picker("Drehung", selection: rotationBinding) {
                         ForEach(DisplayRotation.allCases, id: \.rawValue) {
                             rotation in
@@ -159,26 +273,30 @@ struct ControlView: View {
                     }
                     .labelsHidden()
                     .pickerStyle(.segmented)
-                }
 
-                HStack(spacing: 18) {
-                    Toggle(
-                        "Horizontal spiegeln",
-                        isOn: horizontalMirrorBinding
-                    )
-                    Toggle(
-                        "Vertikal spiegeln",
-                        isOn: verticalMirrorBinding
-                    )
-                    Spacer()
-                    Button("Standard") {
-                        model.resetTransform()
+                    HStack(spacing: 16) {
+                        Toggle(
+                            "Horizontal spiegeln",
+                            isOn: horizontalMirrorBinding
+                        )
+                        Toggle(
+                            "Vertikal spiegeln",
+                            isOn: verticalMirrorBinding
+                        )
+                        Spacer()
+                        Button("Standard") {
+                            model.resetTransform()
+                        }
+                        .controlSize(.small)
                     }
-                    .controlSize(.small)
+                    .toggleStyle(.checkbox)
                 }
-                .toggleStyle(.checkbox)
             }
+        }
+    }
 
+    private var startupSection: some View {
+        ControlSection(title: "Start", systemImage: "power") {
             VStack(alignment: .leading, spacing: 6) {
                 Toggle(
                     "Ausgabe beim App-Start automatisch starten",
@@ -224,7 +342,11 @@ struct ControlView: View {
                 }
             }
             .toggleStyle(.checkbox)
+        }
+    }
 
+    private var statusSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 8) {
                 Image(
                     systemName: model.statusIsError
@@ -256,40 +378,39 @@ struct ControlView: View {
                 }
                 .controlSize(.small)
             }
+        }
+    }
 
-            HStack {
-                Button {
-                    model.refreshDisplays()
-                } label: {
-                    Label("Monitore aktualisieren", systemImage: "arrow.clockwise")
+    private var actionBar: some View {
+        HStack {
+            Button {
+                model.refreshDisplays()
+            } label: {
+                Label("Aktualisieren", systemImage: "arrow.clockwise")
+            }
+            .disabled(model.isBusy)
+
+            Spacer()
+
+            if model.isBusy {
+                ProgressView()
+                    .controlSize(.small)
+            }
+
+            if model.isRunning || model.isBusy {
+                Button("Stoppen", role: .destructive) {
+                    model.requestStop()
                 }
-                .disabled(model.isBusy)
-
-                Spacer()
-
-                if model.isBusy {
-                    ProgressView()
-                        .controlSize(.small)
-                }
-
-                if model.isRunning || model.isBusy {
-                    Button("Stoppen", role: .destructive) {
-                        model.requestStop()
+                .keyboardShortcut(.cancelAction)
+            } else {
+                Button("Ausgabe starten") {
+                    Task { @MainActor in
+                        await model.start()
                     }
-                    .keyboardShortcut(.cancelAction)
-                } else {
-                    Button("Ausgabe starten") {
-                        Task { @MainActor in
-                            await model.start()
-                        }
-                    }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(!model.canStart)
                 }
+                .keyboardShortcut(.defaultAction)
+                .disabled(!model.canStart)
             }
         }
-        .padding(18)
-        .frame(width: 610)
-        .onAppear(perform: onAppear)
     }
 }

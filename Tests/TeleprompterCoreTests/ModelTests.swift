@@ -249,31 +249,39 @@ func targetConfigurationRoundTrip() throws {
     #expect(decoded == configuration)
 }
 
-@Test("Settings normalize to exactly three named slots")
-func settingsNormalizePresetSlots() {
+@Test("Settings normalize the source to its selected kind")
+func settingsNormalizeSource() {
     let malformed = AppSettings(
-        activePresetIndex: 99,
-        presets: [PresetSlot(name: "   ")],
+        configuration: TeleprompterConfiguration(
+            source: CaptureSourceSelection(
+                kind: .window,
+                display: identity(serial: 3, uuid: "STALE", name: "Alt"),
+                window: WindowIdentity(
+                    bundleIdentifier: "com.example.deck",
+                    applicationName: "Deck",
+                    title: "Sprecheransicht"
+                )
+            ),
+            target: identity(serial: 4, uuid: "TARGET", name: "Prompter")
+        ),
         autoStartOutput: true
     )
     let normalized = malformed.normalized()
 
-    #expect(normalized.presets.count == 3)
-    #expect(normalized.presets.map(\.name) == [
-        "Preset 1", "Preset 2", "Preset 3"
-    ])
-    #expect(normalized.activePresetIndex == 2)
+    #expect(normalized.configuration.source.display == nil)
+    #expect(normalized.configuration.source.window != nil)
+    #expect(normalized.schemaVersion == AppSettings.currentSchemaVersion)
     #expect(normalized.autoStartOutput)
 }
 
 @Test("Complete settings survive persistence codec")
 func settingsCodecRoundTrip() throws {
-    var settings = AppSettings.defaults
-    settings.activePresetIndex = 1
-    settings.autoStartOutput = true
-    settings.presets[1] = PresetSlot(
-        name: "Teleprompter Bühne",
+    let settings = AppSettings(
         configuration: TeleprompterConfiguration(
+            source: CaptureSourceSelection(
+                kind: .display,
+                display: identity(serial: 12, uuid: "SOURCE", name: "Quelle")
+            ),
             target: identity(
                 serial: 11,
                 uuid: "PROMPTER",
@@ -284,13 +292,99 @@ func settingsCodecRoundTrip() throws {
                 mirrorHorizontally: true,
                 mirrorVertically: true
             )
-        )
+        ),
+        autoStartOutput: true
     )
 
     let decoded = try AppSettingsCodec.decode(
         AppSettingsCodec.encode(settings)
     )
     #expect(decoded == settings)
+}
+
+@Test("Schema version 1 presets migrate to the single configuration")
+func legacyPresetsMigrateToSingleConfiguration() throws {
+    struct LegacySlot: Encodable {
+        let name: String
+        let configuration: TeleprompterConfiguration
+    }
+    struct LegacySettings: Encodable {
+        let schemaVersion: Int
+        let activePresetIndex: Int
+        let presets: [LegacySlot]
+        let autoStartOutput: Bool
+    }
+
+    let wanted = TeleprompterConfiguration(
+        target: identity(serial: 21, uuid: "ACTIVE", name: "Prompter"),
+        transform: DisplayTransform(
+            rotation: .degrees180,
+            mirrorHorizontally: false,
+            mirrorVertically: true
+        )
+    )
+    let legacy = LegacySettings(
+        schemaVersion: 1,
+        activePresetIndex: 1,
+        presets: [
+            LegacySlot(name: "Preset 1", configuration: .init()),
+            LegacySlot(name: "Preset 2", configuration: wanted),
+            LegacySlot(name: "Preset 3", configuration: .init())
+        ],
+        autoStartOutput: true
+    )
+
+    let decoded = try AppSettingsCodec.decode(
+        JSONEncoder().encode(legacy)
+    )
+
+    #expect(decoded.configuration == wanted)
+    #expect(decoded.configuration.source.kind == .virtualDisplay)
+    #expect(decoded.autoStartOutput)
+    #expect(decoded.schemaVersion == AppSettings.currentSchemaVersion)
+}
+
+@Test("Window identity resolves only when it is unambiguous")
+func windowIdentityResolution() {
+    let deck = WindowIdentity(
+        bundleIdentifier: "com.example.deck",
+        applicationName: "Deck",
+        title: "Sprecheransicht"
+    )
+    let notes = WindowIdentity(
+        bundleIdentifier: "com.example.deck",
+        applicationName: "Deck",
+        title: "Notizen"
+    )
+    let other = WindowIdentity(
+        bundleIdentifier: "com.example.browser",
+        applicationName: "Browser",
+        title: "Sprecheransicht"
+    )
+
+    #expect(
+        WindowIdentityMatcher.uniqueMatch(for: deck, among: [other, notes, deck])
+            == 2
+    )
+    #expect(
+        WindowIdentityMatcher.uniqueMatch(for: deck, among: [other]) == nil
+    )
+    #expect(
+        WindowIdentityMatcher.uniqueMatch(for: deck, among: [deck, deck]) == nil
+    )
+}
+
+@Test("Only a complete source selection can start the output")
+func sourceSelectionCompleteness() {
+    #expect(CaptureSourceSelection.virtualDisplay.isComplete)
+    #expect(!CaptureSourceSelection(kind: .display).isComplete)
+    #expect(!CaptureSourceSelection(kind: .window).isComplete)
+    #expect(
+        CaptureSourceSelection(
+            kind: .display,
+            display: identity(serial: 1, uuid: "A", name: "A")
+        ).isComplete
+    )
 }
 
 private func identity(

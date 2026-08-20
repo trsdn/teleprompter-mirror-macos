@@ -2,6 +2,7 @@ import CoreMedia
 import CoreVideo
 import Foundation
 @preconcurrency import ScreenCaptureKit
+import TeleprompterCore
 
 enum CapturePipelineError: LocalizedError {
     case invalidSourceGeometry(width: Int, height: Int)
@@ -128,9 +129,10 @@ private final class CaptureStreamBridge: NSObject, @unchecked Sendable,
     }
 }
 
-/// Captures exactly the retained virtual source display with ScreenCaptureKit.
-/// The filter, stream, delegate/output bridge, and callback queue are all
-/// retained by this session until explicit teardown completes.
+/// Captures exactly the resolved source (virtual display, physical display, or
+/// a single window) with ScreenCaptureKit. The filter, stream, delegate/output
+/// bridge, and callback queue are all retained by this session until explicit
+/// teardown completes.
 @MainActor
 final class CaptureSession {
     private let filter: SCContentFilter
@@ -150,7 +152,7 @@ final class CaptureSession {
     ] = []
 
     init(
-        snapshot: ResolvedDisplaySnapshot,
+        snapshot: ResolvedCaptureSnapshot,
         frameReceiver: FrameReceiver,
         onUnexpectedStop: @escaping @Sendable (String) -> Void
     ) throws {
@@ -161,28 +163,25 @@ final class CaptureSession {
             )
         }
 
-        let filter = SCContentFilter(
-            display: snapshot.sourceCaptureDisplay,
-            excludingWindows: []
-        )
+        let filter = Self.makeFilter(for: snapshot)
         let configuration = SCStreamConfiguration()
-        if #available(macOS 14.0, *) {
-            configuration.width = max(
-                1,
-                Int(filter.contentRect.width * CGFloat(filter.pointPixelScale))
-            )
-            configuration.height = max(
-                1,
-                Int(filter.contentRect.height * CGFloat(filter.pointPixelScale))
-            )
-        } else {
-            configuration.width = snapshot.sourceWidth
-            configuration.height = snapshot.sourceHeight
-        }
+        let requested = Self.captureDimensions(
+            for: snapshot,
+            filter: filter
+        )
+        configuration.width = requested.width
+        configuration.height = requested.height
         configuration.pixelFormat = kCVPixelFormatType_32BGRA
         configuration.minimumFrameInterval = CMTime(value: 1, timescale: 30)
         configuration.queueDepth = 4
-        configuration.showsCursor = true
+        configuration.showsCursor = snapshot.sourceKind != .window
+        if #available(macOS 14.0, *), snapshot.sourceKind == .window {
+            // A window is mirrored on its own; the desktop behind it would
+            // otherwise bleed into the transparent corners.
+            configuration.backgroundColor = .black
+            configuration.ignoreShadowsSingleWindow = true
+            configuration.shouldBeOpaque = true
+        }
 
         let bridge = CaptureStreamBridge(
             frameReceiver: frameReceiver,
@@ -202,6 +201,57 @@ final class CaptureSession {
             configuration: configuration,
             delegate: bridge
         )
+    }
+
+    private static func makeFilter(
+        for snapshot: ResolvedCaptureSnapshot
+    ) -> SCContentFilter {
+        switch snapshot.source {
+        case let .display(display, _):
+            guard snapshot.sourceKind == .display,
+                  !snapshot.excludedApplications.isEmpty else {
+                // The virtual source never shows this app's windows, so no
+                // exclusion is needed and none is applied.
+                return SCContentFilter(display: display, excludingWindows: [])
+            }
+            // A physical source display can show the control window; excluding
+            // this app keeps it out of the mirrored image.
+            return SCContentFilter(
+                display: display,
+                excludingApplications: snapshot.excludedApplications,
+                exceptingWindows: []
+            )
+        case let .window(window):
+            return SCContentFilter(desktopIndependentWindow: window)
+        }
+    }
+
+    /// Capture never exceeds what the output display can show, so a large
+    /// source is scaled down by ScreenCaptureKit instead of by the renderer.
+    private static func captureDimensions(
+        for snapshot: ResolvedCaptureSnapshot,
+        filter: SCContentFilter
+    ) -> PixelDimensions {
+        var width = snapshot.sourceWidth
+        var height = snapshot.sourceHeight
+        if #available(macOS 14.0, *) {
+            let scale = CGFloat(filter.pointPixelScale)
+            width = max(1, Int((filter.contentRect.width * scale).rounded()))
+            height = max(1, Int((filter.contentRect.height * scale).rounded()))
+        }
+
+        let fitted = CaptureSizing.fitted(
+            sourceWidth: width,
+            sourceHeight: height,
+            maximumDimension: max(
+                snapshot.targetDescriptor.pixelWidth,
+                snapshot.targetDescriptor.pixelHeight
+            )
+        )
+        guard fitted.width > 0, fitted.height > 0 else {
+            return PixelDimensions(width: width, height: height)
+        }
+        return fitted
     }
 
     func start() async throws {

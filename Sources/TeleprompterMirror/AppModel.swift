@@ -60,14 +60,16 @@ private enum SettingsStore {
 @MainActor
 final class AppModel: ObservableObject {
     @Published private(set) var displays: [DisplayDescriptor] = []
+    @Published private(set) var windows: [WindowDescriptor] = []
+    @Published private(set) var sourceKind: CaptureSourceKind
+    @Published private(set) var selectedSourceDisplayID: CGDirectDisplayID?
+    @Published private(set) var selectedSourceWindowID: CGWindowID?
     @Published private(set) var selectedDisplayID: CGDirectDisplayID?
     @Published private(set) var transform: DisplayTransform
-    @Published private(set) var presets: [PresetSlot]
-    @Published private(set) var activePresetIndex: Int
-    @Published private(set) var configurationIsDirty = false
     @Published private(set) var autoStartOutput: Bool
     @Published private(set) var isRunning = false
     @Published private(set) var isBusy = false
+    @Published private(set) var isRefreshingWindows = false
     @Published private(set) var permissionGranted = false
     @Published private(set) var statusText = "Monitore werden gesucht …"
     @Published private(set) var statusIsError = false
@@ -98,9 +100,11 @@ final class AppModel: ObservableObject {
     private var settings: AppSettings
     /// A separate process owns the private virtual display. Keeping creation
     /// and ScreenCaptureKit capture in different processes avoids a macOS 26
-    /// failure where a Finder-launched app receives no stream callbacks.
+    /// failure where a Finder-launched app receives no stream callbacks. The
+    /// host only runs while the virtual display is actually the source.
     private var virtualDisplayHost: VirtualDisplayHostProcess?
     private var virtualDisplayID: CGDirectDisplayID?
+    private var workingSource: CaptureSourceSelection
     private var workingTargetIdentity: PersistentDisplayIdentity?
     private var lifecycle: Lifecycle = .idle
     private var blockReason: BlockReason?
@@ -113,8 +117,9 @@ final class AppModel: ObservableObject {
     private var outputController: OutputWindowController?
     private var startingCaptureSession: CaptureSession?
     private var startingOutputController: OutputWindowController?
-    private var activeSnapshot: ResolvedDisplaySnapshot?
+    private var activeSnapshot: ResolvedCaptureSnapshot?
     private var displayChangeTask: Task<Void, Never>?
+    private var windowRefreshTask: Task<Void, Never>?
     private var selfTestTimeoutTask: Task<Void, Never>?
     private var stopWaiters: [CheckedContinuation<Void, Never>] = []
     private var didLaunch = false
@@ -124,12 +129,11 @@ final class AppModel: ObservableObject {
         let loaded = SettingsStore.load(from: defaults).normalized()
         self.defaults = defaults
         settings = loaded
-        presets = loaded.presets
-        activePresetIndex = loaded.activePresetIndex
         autoStartOutput = loaded.autoStartOutput
 
-        let configuration =
-            loaded.presets[loaded.activePresetIndex].configuration
+        let configuration = loaded.configuration
+        workingSource = configuration.source
+        sourceKind = configuration.source.kind
         workingTargetIdentity = configuration.target
         transform = configuration.transform
         permissionGranted = CGPreflightScreenCaptureAccess()
@@ -153,24 +157,53 @@ final class AppModel: ObservableObject {
 
     deinit {
         displayChangeTask?.cancel()
+        windowRefreshTask?.cancel()
         selfTestTimeoutTask?.cancel()
         NotificationCenter.default.removeObserver(self)
     }
 
     var canStart: Bool {
         !isRunning && !isBusy && workingTargetIdentity != nil
+            && workingSource.isComplete
     }
 
     var canStop: Bool {
         desiredOutput || isRunning || isBusy
     }
 
-    var canSavePreset: Bool {
-        selectedDisplayID != nil
+    var usesVirtualSource: Bool {
+        sourceKind == .virtualDisplay
     }
 
-    var activePresetName: String {
-        presets[activePresetIndex].name
+    var virtualSourceName: String {
+        VirtualSource.name
+    }
+
+    /// Physical displays that may act as a source. The output target is
+    /// excluded, because mirroring a display onto itself would cover it.
+    var sourceDisplays: [DisplayDescriptor] {
+        displays.filter { $0.id != selectedDisplayID }
+    }
+
+    var sourceSummary: String {
+        switch sourceKind {
+        case .virtualDisplay:
+            return "Virtueller Monitor „\(VirtualSource.name)“ (\(VirtualSource.width)×\(VirtualSource.height))"
+        case .display:
+            guard let identity = workingSource.display else {
+                return "Kein Quellmonitor ausgewählt."
+            }
+            return selectedSourceDisplayID == nil
+                ? "Gespeicherter Quellmonitor, derzeit nicht eindeutig verbunden: \(identity.localizedName)"
+                : identity.localizedName
+        case .window:
+            guard let identity = workingSource.window else {
+                return "Kein Quellfenster ausgewählt."
+            }
+            return selectedSourceWindowID == nil
+                ? "Gespeichertes Fenster, derzeit nicht eindeutig geöffnet: \(identity.localizedName)"
+                : identity.localizedName
+        }
     }
 
     var displayConnectionHint: String? {
@@ -185,7 +218,10 @@ final class AppModel: ObservableObject {
         guard displays.count == 1 else {
             return nil
         }
-        return "Nur ein physischer Monitor ist verbunden; er dient als Ziel. Inhalte auf den virtuellen Quellmonitor „\(VirtualSource.name)“ legen. Stoppen bleibt über das Statusmenü erreichbar."
+        if sourceKind == .display {
+            return "Nur ein physischer Monitor ist verbunden; er kann nicht gleichzeitig Quelle und Ziel sein. Fenstermodus oder virtuellen Monitor wählen."
+        }
+        return "Nur ein physischer Monitor ist verbunden; er dient als Ziel und die Ausgabe überdeckt dort den Schreibtisch. Stoppen bleibt über das Statusmenü erreichbar."
     }
 
     var appIsInApplicationsFolder: Bool {
@@ -205,9 +241,14 @@ final class AppModel: ObservableObject {
     }
 
     private func finishLaunching() async {
-        await ensureVirtualSource()
+        if usesVirtualSource {
+            await ensureVirtualSource()
+        }
         updatePermissionStatus()
         refreshLoginItemStatus()
+        if sourceKind == .window {
+            refreshWindows()
+        }
 
         if isSelfTest {
             await startSelfTestIfRequested()
@@ -218,8 +259,8 @@ final class AppModel: ObservableObject {
     }
 
     /// Starts a headless copy of this signed executable that owns the virtual
-    /// display for the app lifetime. The main process remains the sole
-    /// ScreenCaptureKit client.
+    /// display for as long as it is the selected source. The main process
+    /// remains the sole ScreenCaptureKit client.
     private func ensureVirtualSource() async {
         guard virtualDisplayID == nil else {
             return
@@ -244,6 +285,81 @@ final class AppModel: ObservableObject {
         updateIdleStatus()
     }
 
+    /// Tears the virtual display down when another source is chosen, so no
+    /// unused synthetic monitor stays in the arrangement.
+    private func releaseVirtualSource() {
+        guard virtualDisplayHost != nil || virtualDisplayID != nil else {
+            return
+        }
+        virtualDisplayHost?.stop()
+        virtualDisplayHost = nil
+        virtualDisplayID = nil
+        refreshDisplaySnapshot()
+    }
+
+    func selectSourceKind(_ kind: CaptureSourceKind) {
+        guard kind != sourceKind else {
+            return
+        }
+        let shouldContinueOutput =
+            !manualStopSuppressed && (desiredOutput || isRunning)
+        invalidateStartIfNeeded()
+
+        sourceKind = kind
+        workingSource.kind = kind
+        blockReason = nil
+
+        Task { @MainActor [weak self] in
+            guard let self else {
+                return
+            }
+            if isRunning || captureSession != nil {
+                await stopCommittedOutput(
+                    message: "Quelle gewechselt; Ausgabe wird neu aufgebaut.",
+                    isError: false
+                )
+            }
+            switch kind {
+            case .virtualDisplay:
+                await ensureVirtualSource()
+            case .display:
+                releaseVirtualSource()
+            case .window:
+                releaseVirtualSource()
+                refreshWindows()
+            }
+            refreshDisplaySnapshot()
+            persistConfiguration()
+            desiredOutput = shouldContinueOutput
+            updateIdleStatus()
+            await reconcileOutput()
+        }
+    }
+
+    func selectSourceDisplay(_ displayID: CGDirectDisplayID?) {
+        guard !isRunning, !isBusy else {
+            return
+        }
+        selectedSourceDisplayID = displayID
+        workingSource.display = displayID.flatMap { id in
+            displays.first(where: { $0.id == id })?.identity
+        }
+        persistConfiguration()
+        updateIdleStatus()
+    }
+
+    func selectSourceWindow(_ windowID: CGWindowID?) {
+        guard !isRunning, !isBusy else {
+            return
+        }
+        selectedSourceWindowID = windowID
+        workingSource.window = windowID.flatMap { id in
+            windows.first(where: { $0.id == id })?.identity
+        }
+        persistConfiguration()
+        updateIdleStatus()
+    }
+
     func selectDisplay(_ displayID: CGDirectDisplayID?) {
         guard !isRunning, !isBusy else {
             return
@@ -252,75 +368,44 @@ final class AppModel: ObservableObject {
         workingTargetIdentity = displayID.flatMap { id in
             displays.first(where: { $0.id == id })?.identity
         }
-        updateDirtyFlag()
+        // A display can never be its own source and target at the same time.
+        if sourceKind == .display, displayID != nil,
+           selectedSourceDisplayID == displayID {
+            selectSourceDisplay(nil)
+        }
+        persistConfiguration()
         updateIdleStatus()
     }
 
     func setTransform(_ newTransform: DisplayTransform) {
         transform = newTransform
         outputController?.updateTransform(newTransform)
-        updateDirtyFlag()
+        persistConfiguration()
     }
 
     func resetTransform() {
         setTransform(.teleprompterDefault)
     }
 
-    func selectPreset(_ index: Int) {
-        guard settings.presets.indices.contains(index) else {
+    func refreshWindows() {
+        guard !isRefreshingWindows else {
             return
         }
-
-        let shouldContinueOutput =
-            !manualStopSuppressed
-            && (desiredOutput || isRunning || autoStartOutput)
-        invalidateStartIfNeeded()
-        settings.activePresetIndex = index
-        activePresetIndex = index
-        persistSettings()
-        loadActivePreset()
-        blockReason = nil
-        desiredOutput = shouldContinueOutput
-
-        Task { @MainActor [weak self] in
-            await self?.reconcileOutput()
+        isRefreshingWindows = true
+        windowRefreshTask?.cancel()
+        windowRefreshTask = Task { @MainActor [weak self] in
+            let found = await DisplayCatalog.availableWindows()
+            guard let self, !Task.isCancelled else {
+                return
+            }
+            windows = found
+            selectedSourceWindowID = DisplayCatalog.resolve(
+                workingSource.window,
+                among: found
+            )?.id
+            isRefreshingWindows = false
+            updateIdleStatus()
         }
-    }
-
-    func reloadActivePreset() {
-        selectPreset(activePresetIndex)
-    }
-
-    func renameActivePreset(_ name: String) {
-        let limited = String(name.prefix(40))
-        settings.presets[activePresetIndex].name = limited
-        presets = settings.presets
-        persistSettings()
-    }
-
-    func saveCurrentConfigurationToActivePreset() {
-        guard canSavePreset else {
-            setStatus(
-                "Ein eindeutig verbundener Monitor muss ausgewählt sein.",
-                isError: true
-            )
-            return
-        }
-
-        settings.presets[activePresetIndex].configuration =
-            currentConfiguration
-        if settings.presets[activePresetIndex].name
-            .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            settings.presets[activePresetIndex].name =
-                "Preset \(activePresetIndex + 1)"
-        }
-        presets = settings.presets
-        persistSettings()
-        updateDirtyFlag()
-        setStatus(
-            "„\(activePresetName)“ wurde gespeichert.",
-            isError: false
-        )
     }
 
     func setAutoStartOutput(_ enabled: Bool) {
@@ -346,6 +431,10 @@ final class AppModel: ObservableObject {
 
     func refreshDisplays() {
         refreshDisplaySnapshot()
+        if sourceKind == .window {
+            refreshWindows()
+        }
+        updateIdleStatus()
         Task { @MainActor [weak self] in
             await self?.reconcileOutput()
         }
@@ -525,6 +614,7 @@ final class AppModel: ObservableObject {
 
     func shutdown() async {
         displayChangeTask?.cancel()
+        windowRefreshTask?.cancel()
         selfTestTimeoutTask?.cancel()
         manualStopSuppressed = true
         desiredOutput = false
@@ -551,6 +641,10 @@ final class AppModel: ObservableObject {
         guard isSelfTest else {
             return
         }
+        // The self test always exercises the virtual source path, because it
+        // is the only source that needs no user interaction to exist.
+        sourceKind = .virtualDisplay
+        workingSource = .virtualDisplay
         await ensureVirtualSource()
         guard let virtualDisplayID else {
             finishSelfTest(
@@ -583,7 +677,6 @@ final class AppModel: ObservableObject {
         workingTargetIdentity = target.identity
         selectedDisplayID = target.id
         transform = .teleprompterDefault
-        updateDirtyFlag()
         manualStopSuppressed = false
         blockReason = nil
         desiredOutput = true
@@ -627,29 +720,19 @@ final class AppModel: ObservableObject {
 
     private var currentConfiguration: TeleprompterConfiguration {
         TeleprompterConfiguration(
+            source: workingSource,
             target: workingTargetIdentity,
             transform: transform
         )
     }
 
+    private func persistConfiguration() {
+        settings.configuration = currentConfiguration
+        persistSettings()
+    }
+
     private func persistSettings() {
         SettingsStore.save(settings, to: defaults)
-    }
-
-    private func loadActivePreset() {
-        let configuration =
-            settings.presets[settings.activePresetIndex].configuration
-        workingTargetIdentity = configuration.target
-        transform = configuration.transform
-        outputController?.updateTransform(transform)
-        refreshDisplaySnapshot()
-        updateDirtyFlag()
-    }
-
-    private func updateDirtyFlag() {
-        configurationIsDirty =
-            currentConfiguration
-            != settings.presets[activePresetIndex].configuration
     }
 
     private func refreshDisplaySnapshot() {
@@ -666,7 +749,7 @@ final class AppModel: ObservableObject {
             workingTargetIdentity = fallback.identity
         }
         selectedDisplayID = resolvedTarget?.id
-        updateDirtyFlag()
+        selectedSourceDisplayID = resolvedSourceDisplay?.id
     }
 
     /// The saved output target if it resolves uniquely among the physical
@@ -675,6 +758,26 @@ final class AppModel: ObservableObject {
         DisplayCatalog.resolve(
             workingTargetIdentity,
             among: displays
+        )
+    }
+
+    private var resolvedSourceDisplay: DisplayDescriptor? {
+        guard sourceKind == .display else {
+            return nil
+        }
+        return DisplayCatalog.resolve(
+            workingSource.display,
+            among: displays
+        )
+    }
+
+    private var resolvedSourceWindow: WindowDescriptor? {
+        guard sourceKind == .window else {
+            return nil
+        }
+        return DisplayCatalog.resolve(
+            workingSource.window,
+            among: windows
         )
     }
 
@@ -720,7 +823,7 @@ final class AppModel: ObservableObject {
             return
         }
 
-        guard let virtualDisplayID else {
+        if usesVirtualSource, virtualDisplayID == nil {
             let message =
                 "Der virtuelle Quellmonitor konnte nicht erstellt werden (private API nicht verfügbar)."
             if lifecycle == .running || captureSession != nil {
@@ -732,7 +835,7 @@ final class AppModel: ObservableObject {
             return
         }
 
-        guard let target = resolvedTarget else {
+        guard let target = resolvedTarget, resolvedSourceIsAvailable else {
             if case .starting = lifecycle {
                 operationEpoch &+= 1
                 setStatus(waitingStatusText, isError: false)
@@ -775,21 +878,58 @@ final class AppModel: ObservableObject {
         case .starting, .stopping:
             return
         case .idle, .waiting, .blocked:
-            await startResolvedOutput(
-                virtualDisplayID: virtualDisplayID,
-                sourceWidth: VirtualSource.width,
-                sourceHeight: VirtualSource.height,
-                target: target
-            )
+            await startResolvedOutput(target: target)
         case .running:
             break
         }
     }
 
+    /// True when the currently selected source can be captured right now.
+    private var resolvedSourceIsAvailable: Bool {
+        switch sourceKind {
+        case .virtualDisplay:
+            return virtualDisplayID != nil
+        case .display:
+            return resolvedSourceDisplay != nil
+        case .window:
+            return resolvedSourceWindow != nil
+        }
+    }
+
+    private func makeSnapshot(
+        target: DisplayDescriptor
+    ) async throws -> ResolvedCaptureSnapshot {
+        switch sourceKind {
+        case .virtualDisplay:
+            guard let virtualDisplayID else {
+                throw DisplayResolutionError.virtualSourceUnavailable
+            }
+            return try await DisplayCatalog.makeVirtualSourceSnapshot(
+                virtualDisplayID: virtualDisplayID,
+                sourceWidth: VirtualSource.width,
+                sourceHeight: VirtualSource.height,
+                target: target
+            )
+        case .display:
+            guard let source = resolvedSourceDisplay else {
+                throw DisplayResolutionError.sourceDisplayUnavailable
+            }
+            return try await DisplayCatalog.makeDisplaySourceSnapshot(
+                source: source,
+                target: target
+            )
+        case .window:
+            guard let source = resolvedSourceWindow else {
+                throw DisplayResolutionError.sourceWindowUnavailable
+            }
+            return try await DisplayCatalog.makeWindowSourceSnapshot(
+                source: source,
+                target: target
+            )
+        }
+    }
+
     private func startResolvedOutput(
-        virtualDisplayID: CGDirectDisplayID,
-        sourceWidth: Int,
-        sourceHeight: Int,
         target: DisplayDescriptor
     ) async {
         operationEpoch &+= 1
@@ -803,12 +943,7 @@ final class AppModel: ObservableObject {
         var localSession: CaptureSession?
 
         do {
-            let snapshot = try await DisplayCatalog.makeResolvedSnapshot(
-                virtualDisplayID: virtualDisplayID,
-                sourceWidth: sourceWidth,
-                sourceHeight: sourceHeight,
-                target: target
-            )
+            let snapshot = try await makeSnapshot(target: target)
             guard epoch == operationEpoch,
                   desiredOutput,
                   !manualStopSuppressed else {
@@ -884,7 +1019,7 @@ final class AppModel: ObservableObject {
                 return
             }
 
-            try await DisplayCatalog.revalidate(
+            try DisplayCatalog.revalidate(
                 snapshot,
                 virtualDisplayID: virtualDisplayID
             )
@@ -921,7 +1056,7 @@ final class AppModel: ObservableObject {
                 isError: false
             )
             lifecycleLogger.notice(
-                "Ausgabe gestartet: virtueller Quellmonitor \(virtualDisplayID, privacy: .public) → Zielmonitor \(snapshot.targetDescriptor.id, privacy: .public)"
+                "Ausgabe gestartet: Quelle \(snapshot.sourceLabel, privacy: .public) → Zielmonitor \(snapshot.targetDescriptor.id, privacy: .public)"
             )
         } catch {
             let startError = error
@@ -1080,7 +1215,19 @@ final class AppModel: ObservableObject {
                 return
             }
             refreshDisplaySnapshot()
-            if resolvedTarget != nil {
+            if sourceKind == .window {
+                // A closed or hidden window ends the stream; re-enumerate so a
+                // reopened window can be picked up instead of hard-blocking.
+                windows = await DisplayCatalog.availableWindows()
+                selectedSourceWindowID = DisplayCatalog.resolve(
+                    workingSource.window,
+                    among: windows
+                )?.id
+            }
+            guard epoch == operationEpoch else {
+                return
+            }
+            if resolvedTarget != nil, resolvedSourceIsAvailable {
                 blockReason = .capture
                 await stopCommittedOutput(
                     message: "Die Bildschirmaufnahme wurde beendet: \(message) Erneut mit „Ausgabe starten“ versuchen.",
@@ -1189,26 +1336,45 @@ final class AppModel: ObservableObject {
 
     private var waitingStatusText: String {
         guard let workingTargetIdentity else {
-            return "Aktives Preset ist noch nicht mit einem Zielmonitor konfiguriert."
+            return "Es ist noch kein Zielmonitor ausgewählt."
         }
         if selectedDisplayID == nil {
             return "Warte ruhig auf den gespeicherten Zielmonitor „\(workingTargetIdentity.localizedName)“ …"
         }
-        return "Warte auf eine eindeutige Zielmonitorzuordnung …"
+        switch sourceKind {
+        case .virtualDisplay:
+            return "Warte auf den virtuellen Quellmonitor „\(VirtualSource.name)“ …"
+        case .display:
+            guard let identity = workingSource.display else {
+                return "Es ist noch kein Quellmonitor ausgewählt."
+            }
+            return "Warte ruhig auf den gespeicherten Quellmonitor „\(identity.localizedName)“ …"
+        case .window:
+            guard let identity = workingSource.window else {
+                return "Es ist noch kein Quellfenster ausgewählt."
+            }
+            return "Warte ruhig auf das Fenster „\(identity.localizedName)“ …"
+        }
     }
 
-    /// Transient start failures where the virtual source is not yet online or
-    /// ready for capture (e.g. right after creation during login autostart) or
-    /// the display configuration changed mid-start. These self-heal on the next
-    /// screen-parameters change, so we wait and retry instead of hard-blocking.
+    /// Transient start failures where the source is not yet online or ready for
+    /// capture (e.g. right after creating the virtual display during login
+    /// autostart) or the display configuration changed mid-start. These
+    /// self-heal on the next screen-parameters change, so we wait and retry
+    /// instead of hard-blocking.
     private func isTransientSourceStartError(_ error: Error) -> Bool {
         guard let error = error as? DisplayResolutionError else {
             return false
         }
         switch error {
-        case .virtualSourceUnavailable, .configurationChanged:
+        case .virtualSourceUnavailable,
+             .sourceDisplayUnavailable,
+             .sourceWindowUnavailable,
+             .configurationChanged:
             return true
-        case .screenCaptureSourceUnavailable, .targetDisplayUnavailable:
+        case .sourceIsTarget,
+             .screenCaptureSourceUnavailable,
+             .targetDisplayUnavailable:
             return false
         }
     }
@@ -1251,9 +1417,11 @@ final class AppModel: ObservableObject {
             )
         } else if selectedDisplayID == nil {
             setStatus(waitingStatusText, isError: false)
+        } else if !workingSource.isComplete || !resolvedSourceIsAvailable {
+            setStatus(waitingStatusText, isError: false)
         } else {
             setStatus(
-                "\(displays.count) Zielmonitor\(displays.count == 1 ? "" : "e") erkannt. Änderungen mit „Preset speichern“ sichern.",
+                "Bereit: \(sourceSummary) → \(resolvedTarget?.name ?? "Zielmonitor").",
                 isError: false
             )
         }
