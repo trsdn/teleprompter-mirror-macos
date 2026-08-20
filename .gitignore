@@ -1,3 +1,14 @@
+# Swift Package Manager
 .build/
+.swiftpm/
+
+# Build-Artefakte
 dist/
+Resources/AppIcon.iconset/
+
+# Xcode
+*.xcuserdatad/
+DerivedData/
+
+# macOS
 .DS_Store

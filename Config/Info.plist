@@ -9,12 +9,14 @@
     <string>Teleprompter Mirror</string>
     <key>CFBundleExecutable</key>
     <string>TeleprompterMirror</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
     <string>com.github.trsdn.TeleprompterMirror</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>TeleprompterMirror</string>
+    <string>Teleprompter Mirror</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -34,6 +36,6 @@
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
     <key>NSScreenCaptureUsageDescription</key>
-    <string>Teleprompter Mirror benötigt Bildschirmaufnahmezugriff, um den privaten virtuellen Quellmonitor „Teleprompter Source“ zu erfassen und dessen Inhalt gespiegelt bzw. gedreht auf dem gewählten Zielmonitor anzuzeigen.</string>
+    <string>Teleprompter Mirror benötigt Bildschirmaufnahmezugriff, um die gewählte Quelle – einen privaten virtuellen Monitor, einen angeschlossenen Monitor oder ein einzelnes Fenster – zu erfassen und deren Inhalt gespiegelt bzw. gedreht auf dem gewählten Zielmonitor anzuzeigen.</string>
 </dict>
 </plist>

@@ -1,4 +1,15 @@
+<div align="center">
+
+<img src="docs/icon.png" alt="App-Icon" width="128">
+
 # Teleprompter Mirror
+
+[![CI](https://github.com/trsdn/teleprompter-mirror-macos/actions/workflows/ci.yml/badge.svg)](https://github.com/trsdn/teleprompter-mirror-macos/actions/workflows/ci.yml)
+[![Lizenz: MIT](https://img.shields.io/badge/Lizenz-MIT-blue.svg)](LICENSE)
+[![Plattform: macOS 13+](https://img.shields.io/badge/Plattform-macOS%2013%2B-lightgrey.svg)](#voraussetzungen)
+[![Swift 6.1](https://img.shields.io/badge/Swift-6.1-orange.svg)](Package.swift)
+
+</div>
 
 Teleprompter Mirror ist eine eigenständige native macOS-App für einen
 Teleprompter- oder Spiegelglas-Aufbau. Sie erfasst eine wählbare Quelle mit
@@ -105,6 +116,16 @@ CODE_SIGN_IDENTITY="Developer ID Application: Name (TEAMID)" ./build-app.sh
 
 Das Skript signiert mit Hardened Runtime; Developer-ID-Builds erhalten einen
 Apple-Zeitstempel.
+
+### App-Icon
+
+Das Icon wird aus Code erzeugt und liegt fertig als `Resources/AppIcon.icns`
+im Repository; für einen normalen Build ist kein zusätzlicher Schritt nötig.
+Nach Änderungen an `Scripts/make-icon.swift` wird es neu generiert:
+
+```bash
+swift Scripts/make-icon.swift
+```
 
 ### Optionaler Laufzeit-Selbsttest
 
@@ -262,3 +283,16 @@ erzeugen.
   native Abmessungen erfordern eine erneute manuelle Auswahl.
 - Das Build-Skript erzeugt standardmäßig die aktuelle Mac-Architektur, kein
   Universal Binary.
+
+## Mitwirken
+
+Beiträge sind willkommen. Der Entwicklungsablauf, die Sprach- und
+Commit-Konventionen sowie der bewusst eng gehaltene Projektumfang sind in
+[CONTRIBUTING.md](CONTRIBUTING.md) beschrieben.
+
+Sicherheitsrelevante Funde bitte **nicht** als Issue melden, sondern wie in
+[SECURITY.md](SECURITY.md) beschrieben über eine private Meldung.
+
+## Lizenz
+
+[MIT](LICENSE) – Copyright © 2026 Torsten Mahr.

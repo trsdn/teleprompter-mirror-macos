@@ -59,6 +59,14 @@ mkdir -p -- "${APP_DIR}/Contents/MacOS" "${APP_DIR}/Contents/Resources"
 install -m 0755 "${EXECUTABLE}" "${APP_DIR}/Contents/MacOS/${PRODUCT_NAME}"
 install -m 0644 "${SCRIPT_DIR}/Config/Info.plist" "${APP_DIR}/Contents/Info.plist"
 
+ICON_FILE="${SCRIPT_DIR}/Resources/AppIcon.icns"
+if [[ -f "${ICON_FILE}" ]]; then
+    install -m 0644 "${ICON_FILE}" "${APP_DIR}/Contents/Resources/AppIcon.icns"
+else
+    printf 'Warnung: %s fehlt. Erzeugen mit: swift Scripts/make-icon.swift\n' \
+        "${ICON_FILE}" >&2
+fi
+
 plutil -lint "${APP_DIR}/Contents/Info.plist"
 
 printf 'Signiere App mit Identität "%s" …\n' "${SIGN_IDENTITY}"

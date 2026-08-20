@@ -1,0 +1,35 @@
+name: Funktionswunsch
+description: Eine Idee oder Verbesserung vorschlagen.
+title: "[Wunsch]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Welches Problem soll gelöst werden?
+      description: Beschreibe den Anwendungsfall, nicht nur die gewünschte Lösung.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Vorgeschlagene Lösung
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Betrachtete Alternativen
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Passt der Wunsch zum Projektumfang?
+      description: |
+        Die App bleibt bewusst schlank: eine Quelle erfassen, spiegeln/drehen,
+        auf einem Zielmonitor ausgeben. Kein Texteditor, kein Skript-Prompter.
+      options:
+        - label: Ja, der Wunsch passt zu diesem Umfang.
+          required: true
