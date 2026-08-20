@@ -12,7 +12,9 @@ namens **AAA**, sofern vorhanden – zeigt den gespiegelten/gedrehten Stream.
 Weil Quelle und Ziel getrennt sind, verdeckt die Vollbildausgabe die Quelle
 nicht und es entsteht keine optische Endlosschleife.
 
-Es gibt keine Drittanbieterpakete, Hilfsprozesse oder Daemons.
+Es gibt keine Drittanbieterpakete oder dauerhaft installierten Daemons. Eine
+zweite Instanz derselben signierten Binary läuft während der App-Laufzeit
+headless als lokaler Display-Host.
 
 ## Warum ein virtueller Quellmonitor
 
@@ -27,22 +29,27 @@ die App über die **private CoreGraphics-API** (`CGVirtualDisplay`,
   instanziiert (siehe `Sources/VirtualDisplayBridge`, ein separater
   Objective-C-Ziel­baustein mit ARC). Es werden keine privaten Symbole
   gelinkt.
-- Das `CGVirtualDisplay`-Objekt wird für die gesamte App-Laufzeit gehalten;
-  der virtuelle Monitor verschwindet, sobald die App beendet wird.
+- Der Hauptprozess startet dieselbe signierte Binary mit einem internen
+  Headless-Argument. Nur dieser Display-Host hält das `CGVirtualDisplay`-
+  Objekt; der Hauptprozess verwendet ausschließlich ScreenCaptureKit und die
+  Ausgabe. Diese Prozessgrenze ist auf macOS 26 erforderlich, weil ein normal
+  über Finder/LaunchServices gestarteter Prozess für einen selbst erzeugten
+  virtuellen Monitor keine zuverlässigen Capture-Callbacks erhält.
+- Der Display-Host beendet sich zusammen mit dem Hauptprozess; der virtuelle
+  Monitor verschwindet dadurch spätestens eine Sekunde nach dem App-Ende.
 - Der virtuelle Monitor erhält eine stabile synthetische Kennung
   (Hersteller/Produkt/Seriennummer) und sRGB-Primärfarben, damit ein Preset
   ihn nicht mit echter Hardware verwechselt.
 
-Als Aufnahmequelle dient ausschließlich der `SCDisplay`, dessen
-`displayID` mit der ID des weiterhin gehaltenen virtuellen Display-Objekts
-übereinstimmt. ScreenCaptureKit wird dafür kurz und begrenzt erneut abgefragt;
-es gibt keinen Fallback über Namen, Position oder den zuletzt erschienenen
-Monitor. Nach der ersten Erkennung wartet die App einmalig fünf Sekunden, weil
-macOS 26 einen neuen virtuellen Monitor bereits auflisten kann, bevor dessen
-Capture-Framebuffer bereit ist. Der Filter verwendet `excludingWindows: []`,
-da App- und
-Ausgabefenster auf physischen Monitoren liegen und niemals auf der virtuellen
-Quelle erscheinen.
+Der Display-Host meldet die tatsächliche `CGDirectDisplayID` einmalig über
+eine private Pipe an den Hauptprozess. Als Aufnahmequelle dient ausschließlich
+der `SCDisplay` mit exakt dieser ID. ScreenCaptureKit wird dafür kurz und
+begrenzt erneut abgefragt; es gibt keinen Fallback über Namen, Position oder
+den zuletzt erschienenen Monitor. Nach der ersten Erkennung wartet die App
+einmalig fünf Sekunden, weil macOS 26 einen neuen virtuellen Monitor bereits
+auflisten kann, bevor dessen Capture-Framebuffer bereit ist. Der Filter
+verwendet `excludingWindows: []`, da App- und Ausgabefenster auf physischen
+Monitoren liegen und niemals auf der virtuellen Quelle erscheinen.
 
 Das Vollbild-Ausgabefenster ist randlos, klickdurchlässig, wird nie zum Haupt-
 oder Tastaturfenster und aktiviert die App nicht. Vor dem Start wird das
@@ -154,9 +161,10 @@ PowerPoint oder ein anderes Fenster auch später auf den virtuellen Desktop
 verschoben werden kann. Echte Stream- und Renderfehler werden weiterhin
 explizit gemeldet.
 
-Der vollständige Pfad wurde auf macOS 26.6.1 mit einem asymmetrischen
-L/R-Testbild auf dem physischen Zielmonitor AAA visuell geprüft; die
-horizontale Spiegelung war korrekt.
+Der vollständige Finder-/LaunchServices-Pfad wurde auf macOS 26.6.1 mit einem
+asymmetrischen L/R-Testbild auf dem physischen Zielmonitor AAA visuell geprüft:
+Das rote `R` erschien links und das gelbe `L` rechts, die horizontale
+Spiegelung war damit korrekt.
 
 ## Presets und Monitoridentität
 
@@ -210,8 +218,8 @@ erzeugen.
   Ausgabe überdeckt dort den Schreibtisch. Die Menüleiste bleibt über dem
   klickdurchlässigen Ausgabefenster erreichbar, sodass das Statusmenü zum
   Stoppen und erneuten Anzeigen der Steuerung verfügbar bleibt.
-- Der virtuelle Monitor ist headless und im Standard-1x-Modus (kein HiDPI);
-  Fenster müssen ggf. „blind“ dorthin verschoben werden.
+- Der virtuelle Monitor ist headless und verwendet einen 1920×1080-HiDPI-
+  Framebuffer; Fenster müssen ggf. „blind“ dorthin verschoben werden.
 - DRM-/HDCP-geschützte Inhalte können von macOS **schwarz** geliefert werden.
 - Audio wird nicht übertragen; der Mauszeiger wird erfasst.
 - Seriennummernlose, identische Zielmonitore ohne eindeutige UUID, Namen oder

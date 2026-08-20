@@ -4,20 +4,11 @@ import Foundation
 import OSLog
 import ServiceManagement
 import TeleprompterCore
-import VirtualDisplayBridge
 
 private let lifecycleLogger = Logger(
     subsystem: "com.github.trsdn.TeleprompterMirror",
     category: "lifecycle"
 )
-
-/// Fixed characteristics of the private virtual capture source.
-private enum VirtualSource {
-    static let name = "Teleprompter Source"
-    static let width = 1920
-    static let height = 1080
-    static let refreshRate = 60.0
-}
 
 /// Name of the physical display preferred as the default output target.
 private let preferredTargetName = "AAA"
@@ -105,9 +96,10 @@ final class AppModel: ObservableObject {
     private let isSelfTest =
         CommandLine.arguments.contains("--self-test")
     private var settings: AppSettings
-    /// The private virtual display used as the capture source. Retained for the
-    /// lifetime of the app so the synthetic display stays online.
-    private var virtualDisplay: VirtualDisplay?
+    /// A separate process owns the private virtual display. Keeping creation
+    /// and ScreenCaptureKit capture in different processes avoids a macOS 26
+    /// failure where a Finder-launched app receives no stream callbacks.
+    private var virtualDisplayHost: VirtualDisplayHostProcess?
     private var virtualDisplayID: CGDirectDisplayID?
     private var workingTargetIdentity: PersistentDisplayIdentity?
     private var lifecycle: Lifecycle = .idle
@@ -207,46 +199,46 @@ final class AppModel: ObservableObject {
             return
         }
         didLaunch = true
-        ensureVirtualSource()
+        Task { @MainActor [weak self] in
+            await self?.finishLaunching()
+        }
+    }
+
+    private func finishLaunching() async {
+        await ensureVirtualSource()
         updatePermissionStatus()
         refreshLoginItemStatus()
 
         if isSelfTest {
-            Task { @MainActor [weak self] in
-                await self?.startSelfTestIfRequested()
-            }
+            await startSelfTestIfRequested()
         } else if autoStartOutput {
             desiredOutput = true
-            Task { @MainActor [weak self] in
-                await self?.reconcileOutput()
-            }
+            await reconcileOutput()
         }
     }
 
-    /// Creates the private virtual capture source once and keeps it for the
-    /// lifetime of the app. Failure is surfaced as status text; the app still
-    /// runs so the user can read the explanation.
-    private func ensureVirtualSource() {
+    /// Starts a headless copy of this signed executable that owns the virtual
+    /// display for the app lifetime. The main process remains the sole
+    /// ScreenCaptureKit client.
+    private func ensureVirtualSource() async {
         guard virtualDisplayID == nil else {
             return
         }
-        guard let display = VirtualDisplay(
-            name: VirtualSource.name,
-            width: UInt32(VirtualSource.width),
-            height: UInt32(VirtualSource.height),
-            refreshRate: VirtualSource.refreshRate
-        ) else {
+        let host = VirtualDisplayHostProcess()
+        do {
+            let displayID = try await host.start()
+            virtualDisplayHost = host
+            virtualDisplayID = displayID
+            lifecycleLogger.notice(
+                "Virtueller Quellmonitor im Display-Host erstellt: \(displayID, privacy: .public) (\(VirtualSource.width, privacy: .public)×\(VirtualSource.height, privacy: .public))"
+            )
+        } catch {
             setStatus(
-                "Der virtuelle Quellmonitor konnte nicht erstellt werden. Die private Anzeige-API ist nicht verfügbar.",
+                "Der virtuelle Quellmonitor konnte nicht erstellt werden: \(error.localizedDescription)",
                 isError: true
             )
             return
         }
-        virtualDisplay = display
-        virtualDisplayID = display.displayID
-        lifecycleLogger.notice(
-            "Virtueller Quellmonitor erstellt: \(display.displayID, privacy: .public) (\(VirtualSource.width, privacy: .public)×\(VirtualSource.height, privacy: .public))"
-        )
         // Re-enumerate so the new virtual display is excluded from targets.
         refreshDisplaySnapshot()
         updateIdleStatus()
@@ -550,7 +542,8 @@ final class AppModel: ObservableObject {
                 isError: false
             )
         }
-        virtualDisplay = nil
+        virtualDisplayHost?.stop()
+        virtualDisplayHost = nil
         virtualDisplayID = nil
     }
 
@@ -558,7 +551,7 @@ final class AppModel: ObservableObject {
         guard isSelfTest else {
             return
         }
-        ensureVirtualSource()
+        await ensureVirtualSource()
         guard let virtualDisplayID else {
             finishSelfTest(
                 "SELF_TEST_FAIL: Der virtuelle Quellmonitor konnte nicht erstellt werden.",
@@ -627,6 +620,9 @@ final class AppModel: ObservableObject {
         captureSession = nil
         startingCaptureSession = nil
         activeSnapshot = nil
+        virtualDisplayHost?.stop()
+        virtualDisplayHost = nil
+        virtualDisplayID = nil
     }
 
     private var currentConfiguration: TeleprompterConfiguration {

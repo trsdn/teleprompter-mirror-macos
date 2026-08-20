@@ -163,7 +163,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-@main
 @MainActor
 struct TeleprompterMirrorApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self)
