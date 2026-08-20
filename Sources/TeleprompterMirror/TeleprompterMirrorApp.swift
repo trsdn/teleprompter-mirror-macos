@@ -181,7 +181,6 @@ struct TeleprompterMirrorApp: App {
                         model: model,
                         showControls: showControls
                     )
-                    WindowPrivacyController.protectAllAppWindows()
                     model.appDidLaunch()
                 }
             )

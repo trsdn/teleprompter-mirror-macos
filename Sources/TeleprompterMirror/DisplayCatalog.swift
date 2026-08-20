@@ -16,33 +16,33 @@ struct DisplayDescriptor: Identifiable, Hashable, Sendable {
     }
 }
 
+/// An immutable, validated pairing of the virtual capture source and the
+/// physical output target. The source is always the private virtual display;
+/// the target is a physical `NSScreen` that shows the transformed image.
 @MainActor
 struct ResolvedDisplaySnapshot {
-    let descriptor: DisplayDescriptor
-    let cgDisplayID: CGDirectDisplayID
-    let scDisplay: SCDisplay
-    let nsScreen: NSScreen
-    let ownApplication: SCRunningApplication
-
-    var maximumOutputDimension: Int {
-        max(descriptor.pixelWidth, descriptor.pixelHeight)
-    }
+    let sourceDisplayID: CGDirectDisplayID
+    let sourceWidth: Int
+    let sourceHeight: Int
+    let sourceCaptureDisplay: SCDisplay
+    let targetDescriptor: DisplayDescriptor
+    let targetScreen: NSScreen
 }
 
 enum DisplayResolutionError: LocalizedError {
-    case displayUnavailable
-    case screenCaptureDisplayUnavailable
-    case processExclusionUnavailable
+    case virtualSourceUnavailable
+    case screenCaptureSourceUnavailable(CGDirectDisplayID)
+    case targetDisplayUnavailable
     case configurationChanged
 
     var errorDescription: String? {
         switch self {
-        case .displayUnavailable:
-            return "Der gewählte Monitor ist nicht eindeutig verbunden."
-        case .screenCaptureDisplayUnavailable:
-            return "Der gewählte Monitor ist für ScreenCaptureKit nicht verfügbar."
-        case .processExclusionUnavailable:
-            return "Die eigene App konnte nicht sicher aus der Aufnahme ausgeschlossen werden."
+        case .virtualSourceUnavailable:
+            return "Der virtuelle Quellmonitor ist für die Bildschirmaufnahme nicht verfügbar."
+        case let .screenCaptureSourceUnavailable(displayID):
+            return "ScreenCaptureKit hat den virtuellen Quellmonitor mit ID \(displayID) nicht gefunden."
+        case .targetDisplayUnavailable:
+            return "Der gewählte Zielmonitor ist nicht eindeutig verbunden."
         case .configurationChanged:
             return "Die Monitorkonfiguration hat sich während des Starts geändert."
         }
@@ -51,9 +51,15 @@ enum DisplayResolutionError: LocalizedError {
 
 @MainActor
 enum DisplayCatalog {
-    static func connectedDisplays() -> [DisplayDescriptor] {
+    /// Physical displays eligible as output targets. The virtual source is
+    /// never listed, so the user can never mirror the source onto itself.
+    static func connectedDisplays(
+        excluding excludedID: CGDirectDisplayID?
+    ) -> [DisplayDescriptor] {
         NSScreen.screens.compactMap { screen in
-            guard let displayID = screen.displayID else {
+            guard let displayID = screen.displayID,
+                  displayID != excludedID,
+                  CGDisplayVendorNumber(displayID) != 0x544D else {
                 return nil
             }
 
@@ -111,68 +117,137 @@ enum DisplayCatalog {
         return displays[index]
     }
 
-    static func makeResolvedSnapshot(
-        for identity: PersistentDisplayIdentity
-    ) async throws -> ResolvedDisplaySnapshot {
-        WindowPrivacyController.protectAllAppWindows()
-        let content = try await SCShareableContent.excludingDesktopWindows(
-            false,
-            onScreenWindowsOnly: false
-        )
-        return try resolvedSnapshot(for: identity, content: content)
+    /// Fallback target when no saved target resolves: the display named
+    /// `preferredName` (AAA) if present, otherwise the smallest external
+    /// display, otherwise the smallest connected display.
+    static func defaultTarget(
+        among displays: [DisplayDescriptor],
+        preferredName: String
+    ) -> DisplayDescriptor? {
+        if let named = displays.first(where: {
+            $0.name.compare(
+                preferredName,
+                options: [.caseInsensitive]
+            ) == .orderedSame
+        }) {
+            return named
+        }
+
+        let externals = displays.filter { CGDisplayIsBuiltin($0.id) == 0 }
+        let pool = externals.isEmpty ? displays : externals
+        return pool.min {
+            ($0.pixelWidth * $0.pixelHeight)
+                < ($1.pixelWidth * $1.pixelHeight)
+        }
     }
 
-    static func revalidate(_ snapshot: ResolvedDisplaySnapshot) async throws {
-        WindowPrivacyController.protectAllAppWindows()
-        let content = try await SCShareableContent.excludingDesktopWindows(
-            false,
-            onScreenWindowsOnly: false
+    static func makeResolvedSnapshot(
+        virtualDisplayID: CGDirectDisplayID,
+        sourceWidth: Int,
+        sourceHeight: Int,
+        target: DisplayDescriptor
+    ) async throws -> ResolvedDisplaySnapshot {
+        guard onlineDisplayIDs().contains(virtualDisplayID) else {
+            throw DisplayResolutionError.virtualSourceUnavailable
+        }
+        let captureDisplay = try await screenCaptureDisplay(
+            matching: virtualDisplayID
         )
-        let current = try resolvedSnapshot(
-            for: snapshot.descriptor.identity,
-            content: content
+        // On macOS 26 a newly published CGVirtualDisplay can already appear in
+        // SCShareableContent while its capture framebuffer is not ready yet.
+        // Starting SCStream in that interval succeeds but never emits frames.
+        try await Task.sleep(for: .seconds(5))
+        guard let screen = NSScreen.screens.first(where: {
+            $0.displayID == target.id
+        }) else {
+            throw DisplayResolutionError.targetDisplayUnavailable
+        }
+
+        return ResolvedDisplaySnapshot(
+            sourceDisplayID: virtualDisplayID,
+            sourceWidth: sourceWidth,
+            sourceHeight: sourceHeight,
+            sourceCaptureDisplay: captureDisplay,
+            targetDescriptor: target,
+            targetScreen: screen
         )
-        guard current.cgDisplayID == snapshot.cgDisplayID,
-              current.descriptor.pixelWidth
-                == snapshot.descriptor.pixelWidth,
-              current.descriptor.pixelHeight
-                == snapshot.descriptor.pixelHeight,
-              current.descriptor.frame == snapshot.descriptor.frame else {
+    }
+
+    static func revalidate(
+        _ snapshot: ResolvedDisplaySnapshot,
+        virtualDisplayID: CGDirectDisplayID
+    ) async throws {
+        guard snapshot.sourceDisplayID == virtualDisplayID,
+              onlineDisplayIDs().contains(virtualDisplayID) else {
+            throw DisplayResolutionError.virtualSourceUnavailable
+        }
+
+        let physical = connectedDisplays(excluding: virtualDisplayID)
+        guard let current = physical.first(where: {
+            $0.id == snapshot.targetDescriptor.id
+        }),
+        current.pixelWidth == snapshot.targetDescriptor.pixelWidth,
+        current.pixelHeight == snapshot.targetDescriptor.pixelHeight,
+        current.frame == snapshot.targetDescriptor.frame else {
             throw DisplayResolutionError.configurationChanged
         }
     }
 
-    private static func resolvedSnapshot(
-        for identity: PersistentDisplayIdentity,
-        content: SCShareableContent
-    ) throws -> ResolvedDisplaySnapshot {
-        let displays = connectedDisplays()
-        guard let descriptor = resolve(identity, among: displays),
-              let screen = NSScreen.screens.first(where: {
-                  $0.displayID == descriptor.id
-              }) else {
-            throw DisplayResolutionError.displayUnavailable
+    /// The set of currently online `CGDirectDisplayID`s, including the private
+    /// virtual source. Empty when the list cannot be queried.
+    private static func onlineDisplayIDs() -> Set<CGDirectDisplayID> {
+        var count: UInt32 = 0
+        guard CGGetOnlineDisplayList(0, nil, &count) == .success, count > 0 else {
+            return []
         }
-        guard let captureDisplay = content.displays.first(where: {
-            $0.displayID == descriptor.id
-        }) else {
-            throw DisplayResolutionError.screenCaptureDisplayUnavailable
+        var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
+        var actual: UInt32 = 0
+        guard CGGetOnlineDisplayList(count, &ids, &actual) == .success else {
+            return []
         }
-        let ownApplications = content.applications.filter {
-            $0.processID == getpid()
-        }
-        guard ownApplications.count == 1,
-              let ownApplication = ownApplications.first else {
-            throw DisplayResolutionError.processExclusionUnavailable
+        return Set(ids.prefix(Int(actual)))
+    }
+
+    /// Resolves only the retained virtual display's live ID. Newly created
+    /// virtual displays can take a short time to appear in ScreenCaptureKit,
+    /// so enumeration is retried briefly but never falls back to a name,
+    /// position, or another display.
+    private static func screenCaptureDisplay(
+        matching displayID: CGDirectDisplayID
+    ) async throws -> SCDisplay {
+        let maximumAttempts = 8
+        var lastEnumerationError: (any Error)?
+
+        for attempt in 1...maximumAttempts {
+            do {
+                let content =
+                    try await SCShareableContent.excludingDesktopWindows(
+                        false,
+                        onScreenWindowsOnly: false
+                    )
+                if let display = content.displays.first(where: {
+                    $0.displayID == displayID
+                }) {
+                    return display
+                }
+                lastEnumerationError = nil
+            } catch {
+                lastEnumerationError = error
+            }
+
+            if attempt < maximumAttempts {
+                try await Task.sleep(for: .milliseconds(125))
+            }
         }
 
-        return ResolvedDisplaySnapshot(
-            descriptor: descriptor,
-            cgDisplayID: descriptor.id,
-            scDisplay: captureDisplay,
-            nsScreen: screen,
-            ownApplication: ownApplication
-        )
+        if let lastEnumerationError {
+            NSLog(
+                "ScreenCaptureKit-Aufzählung für Display %u fehlgeschlagen: %@",
+                displayID,
+                lastEnumerationError.localizedDescription
+            )
+        }
+        throw DisplayResolutionError.screenCaptureSourceUnavailable(displayID)
     }
 
     private static func displayUUID(
@@ -184,15 +259,6 @@ enum DisplayCatalog {
         }
         let uuid = unmanagedUUID.takeRetainedValue()
         return CFUUIDCreateString(kCFAllocatorDefault, uuid) as String?
-    }
-}
-
-@MainActor
-enum WindowPrivacyController {
-    static func protectAllAppWindows() {
-        for window in NSApplication.shared.windows {
-            window.sharingType = .none
-        }
     }
 }
 

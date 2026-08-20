@@ -49,7 +49,7 @@ private enum DirectPresentationEvent: Sendable {
     case failed(reason: String)
 }
 
-/// Enqueues only on ScreenCaptureKit's serial sample queue. Incoming frames
+/// Enqueues only on the display stream's serial frame queue. Incoming frames
 /// are dropped whenever AVFoundation applies backpressure; no secondary queue
 /// is allowed to accumulate.
 private final class DirectSampleBufferPresenter: @unchecked Sendable {
@@ -89,7 +89,7 @@ private final class DirectSampleBufferPresenter: @unchecked Sendable {
         if CVPixelBufferGetIOSurface(pixelBuffer) == nil {
             isActive = false
             event = .failed(
-                reason: "ScreenCaptureKit lieferte keinen IOSurface-gestützten BGRA-Puffer."
+                reason: "Der Aufnahme-Stream lieferte keinen IOSurface-gestützten BGRA-Puffer."
             )
         } else if layer.status == .failed {
             isActive = false
@@ -147,7 +147,7 @@ private final class DirectSampleBufferPresenter: @unchecked Sendable {
     }
 }
 
-/// Thread-safe bridge shared by ScreenCaptureKit and the renderer. It keeps
+/// Thread-safe bridge shared by the capture pipeline and the renderer. It keeps
 /// exactly one retained sample for the dormant fallback path.
 final class FrameReceiver: @unchecked Sendable {
     let frameStore = LatestFrameStore()

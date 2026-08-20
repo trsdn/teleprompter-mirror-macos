@@ -2,27 +2,37 @@ import CoreMedia
 import CoreVideo
 import Foundation
 @preconcurrency import ScreenCaptureKit
-import TeleprompterCore
 
 enum CapturePipelineError: LocalizedError {
-    case processExclusionUnavailable
+    case invalidSourceGeometry(width: Int, height: Int)
 
     var errorDescription: String? {
         switch self {
-        case .processExclusionUnavailable:
-            return "Die eigene App kann nicht sicher aus der Aufnahme ausgeschlossen werden."
+        case let .invalidSourceGeometry(width, height):
+            return "Ungültige Capture-Größe \(width)×\(height)."
         }
     }
 }
 
-final class StreamOutputBridge: NSObject, SCStreamOutput {
+/// ScreenCaptureKit callback bridge. The stream invokes this object only on
+/// the retained serial callback queue. Frames are passed directly to the
+/// renderer; no pixel copy or additional frame queue is introduced.
+private final class CaptureStreamBridge: NSObject, @unchecked Sendable,
+    SCStreamOutput, SCStreamDelegate
+{
+    private let lock = NSLock()
     private let frameReceiver: FrameReceiver
-    private var loggedFirstFrame = false
-    private var loggedFirstSample = false
-    private var deliveredInitialFrame = false
+    private let onUnexpectedStop: @Sendable (String) -> Void
+    private var stoppingIntentionally = false
+    private var loggedFirstCallback = false
+    private var loggedFirstCompleteFrame = false
 
-    init(frameReceiver: FrameReceiver) {
+    init(
+        frameReceiver: FrameReceiver,
+        onUnexpectedStop: @escaping @Sendable (String) -> Void
+    ) {
         self.frameReceiver = frameReceiver
+        self.onUnexpectedStop = onUnexpectedStop
     }
 
     func stream(
@@ -30,49 +40,70 @@ final class StreamOutputBridge: NSObject, SCStreamOutput {
         didOutputSampleBuffer sampleBuffer: CMSampleBuffer,
         of outputType: SCStreamOutputType
     ) {
-        guard outputType == .screen,
-              sampleBuffer.isValid,
-              CMSampleBufferDataIsReady(sampleBuffer),
-              let pixelBuffer = sampleBuffer.imageBuffer else {
-            return
-        }
-
-        let statusNumber = CMGetAttachment(
-            sampleBuffer,
-            key: SCStreamFrameInfo.status.rawValue as CFString,
-            attachmentModeOut: nil
-        ) as? NSNumber
-        if !loggedFirstSample {
-            loggedFirstSample = true
+        lock.lock()
+        if !loggedFirstCallback {
+            loggedFirstCallback = true
             NSLog(
-                "Erster Capture-Sample-Status: %d",
-                statusNumber?.intValue ?? -1
+                "Erster ScreenCaptureKit-Callback: Typ=%ld",
+                outputType.rawValue
             )
         }
+        lock.unlock()
 
-        guard CaptureFramePolicy.shouldDeliver(
-            statusRawValue: statusNumber?.intValue,
-            hasDeliveredInitialFrame: deliveredInitialFrame
-        ) else {
+        guard outputType == .screen else {
             return
         }
-        deliveredInitialFrame = true
+        guard let attachments = CMSampleBufferGetSampleAttachmentsArray(
+            sampleBuffer,
+            createIfNecessary: false
+        ) as? [[SCStreamFrameInfo: Any]],
+              let statusRawValue = attachments.first?[.status] as? Int,
+              statusRawValue == SCFrameStatus.complete.rawValue,
+              sampleBuffer.isValid,
+              CMSampleBufferDataIsReady(sampleBuffer),
+              let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer)
+        else {
+            return
+        }
 
-        if !loggedFirstFrame {
-            loggedFirstFrame = true
+        lock.lock()
+        if !loggedFirstCompleteFrame {
+            loggedFirstCompleteFrame = true
             NSLog(
-                "Erster Videoframe empfangen: %dx%d, Pixelformat %u",
+                "Erster vollständiger ScreenCaptureKit-Frame: %dx%d, Pixelformat %u",
                 CVPixelBufferGetWidth(pixelBuffer),
                 CVPixelBufferGetHeight(pixelBuffer),
                 CVPixelBufferGetPixelFormatType(pixelBuffer)
             )
         }
+        lock.unlock()
 
         markForImmediateDisplay(sampleBuffer)
         frameReceiver.receive(
             sampleBuffer: sampleBuffer,
             pixelBuffer: pixelBuffer
         )
+    }
+
+    func stream(_ stream: SCStream, didStopWithError error: any Error) {
+        lock.lock()
+        let expected = stoppingIntentionally
+        lock.unlock()
+
+        NSLog(
+            "ScreenCaptureKit-Stream beendet%@ : %@",
+            expected ? " (angefordert)" : "",
+            error.localizedDescription
+        )
+        if !expected {
+            onUnexpectedStop(error.localizedDescription)
+        }
+    }
+
+    func prepareForStop() {
+        lock.lock()
+        stoppingIntentionally = true
+        lock.unlock()
     }
 
     private func markForImmediateDisplay(_ sampleBuffer: CMSampleBuffer) {
@@ -97,27 +128,17 @@ final class StreamOutputBridge: NSObject, SCStreamOutput {
     }
 }
 
-final class CaptureStreamDelegate: NSObject, SCStreamDelegate {
-    private let onUnexpectedStop: @Sendable (String) -> Void
-
-    init(onUnexpectedStop: @escaping @Sendable (String) -> Void) {
-        self.onUnexpectedStop = onUnexpectedStop
-    }
-
-    func stream(_ stream: SCStream, didStopWithError error: any Error) {
-        onUnexpectedStop(error.localizedDescription)
-    }
-}
-
+/// Captures exactly the retained virtual source display with ScreenCaptureKit.
+/// The filter, stream, delegate/output bridge, and callback queue are all
+/// retained by this session until explicit teardown completes.
 @MainActor
 final class CaptureSession {
+    private let filter: SCContentFilter
     private let stream: SCStream
-    private let streamOutput: StreamOutputBridge
-    private let streamDelegate: CaptureStreamDelegate
-    private let sampleQueue = DispatchQueue(
-        label: "com.github.trsdn.TeleprompterMirror.capture",
-        qos: .userInteractive
-    )
+    private let streamOutput: CaptureStreamBridge
+    private let streamDelegate: CaptureStreamBridge
+    private let callbackQueue: DispatchQueue
+
     private var outputWasAdded = false
     private var captureStarted = false
     private var startInProgress = false
@@ -133,37 +154,53 @@ final class CaptureSession {
         frameReceiver: FrameReceiver,
         onUnexpectedStop: @escaping @Sendable (String) -> Void
     ) throws {
-        guard snapshot.ownApplication.processID == getpid() else {
-            throw CapturePipelineError.processExclusionUnavailable
+        guard snapshot.sourceWidth > 0, snapshot.sourceHeight > 0 else {
+            throw CapturePipelineError.invalidSourceGeometry(
+                width: snapshot.sourceWidth,
+                height: snapshot.sourceHeight
+            )
         }
 
         let filter = SCContentFilter(
-            display: snapshot.scDisplay,
-            excludingApplications: [snapshot.ownApplication],
-            exceptingWindows: []
-        )
-
-        let captureSize = CaptureSizing.fitted(
-            sourceWidth: snapshot.descriptor.pixelWidth,
-            sourceHeight: snapshot.descriptor.pixelHeight,
-            maximumDimension: snapshot.maximumOutputDimension
+            display: snapshot.sourceCaptureDisplay,
+            excludingWindows: []
         )
         let configuration = SCStreamConfiguration()
-        configuration.width = captureSize.width
-        configuration.height = captureSize.height
+        if #available(macOS 14.0, *) {
+            configuration.width = max(
+                1,
+                Int(filter.contentRect.width * CGFloat(filter.pointPixelScale))
+            )
+            configuration.height = max(
+                1,
+                Int(filter.contentRect.height * CGFloat(filter.pointPixelScale))
+            )
+        } else {
+            configuration.width = snapshot.sourceWidth
+            configuration.height = snapshot.sourceHeight
+        }
         configuration.pixelFormat = kCVPixelFormatType_32BGRA
         configuration.minimumFrameInterval = CMTime(value: 1, timescale: 30)
-        configuration.queueDepth = 2
+        configuration.queueDepth = 4
         configuration.showsCursor = true
-        configuration.capturesAudio = false
 
-        let delegate = CaptureStreamDelegate(onUnexpectedStop: onUnexpectedStop)
-        streamDelegate = delegate
-        streamOutput = StreamOutputBridge(frameReceiver: frameReceiver)
+        let bridge = CaptureStreamBridge(
+            frameReceiver: frameReceiver,
+            onUnexpectedStop: onUnexpectedStop
+        )
+        let queue = DispatchQueue(
+            label: "com.github.trsdn.TeleprompterMirror.capture",
+            qos: .userInteractive
+        )
+
+        self.filter = filter
+        streamOutput = bridge
+        streamDelegate = bridge
+        callbackQueue = queue
         stream = SCStream(
             filter: filter,
             configuration: configuration,
-            delegate: delegate
+            delegate: bridge
         )
     }
 
@@ -172,30 +209,24 @@ final class CaptureSession {
             throw CancellationError()
         }
         startInProgress = true
+
         do {
             try stream.addStreamOutput(
                 streamOutput,
                 type: .screen,
-                sampleHandlerQueue: sampleQueue
+                sampleHandlerQueue: callbackQueue
             )
             outputWasAdded = true
             try await stream.startCapture()
             captureStarted = true
         } catch {
             let startError = error
-            if outputWasAdded {
-                do {
-                    try stream.removeStreamOutput(streamOutput, type: .screen)
-                } catch {
-                    NSLog(
-                        "Stream-Ausgabe nach Startfehler nicht entfernbar: %@",
-                        error.localizedDescription
-                    )
-                }
-            }
-            outputWasAdded = false
+            NSLog(
+                "ScreenCaptureKit-Stream konnte nicht gestartet werden: %@",
+                error.localizedDescription
+            )
+            teardownAfterStartFailure()
             startInProgress = false
-            stopped = true
             finishStopWaiters(with: .success(()))
             throw startError
         }
@@ -211,7 +242,7 @@ final class CaptureSession {
     }
 
     func stop() async throws {
-        if stopped {
+        guard !stopped else {
             return
         }
         stopRequested = true
@@ -231,13 +262,17 @@ final class CaptureSession {
     }
 
     private func performStop() async -> Result<Void, any Error> {
+        streamDelegate.prepareForStop()
         var firstError: (any Error)?
-
         if captureStarted {
             do {
                 try await stream.stopCapture()
             } catch {
                 firstError = error
+                NSLog(
+                    "ScreenCaptureKit-Stream konnte nicht gestoppt werden: %@",
+                    error.localizedDescription
+                )
             }
             captureStarted = false
         }
@@ -245,10 +280,14 @@ final class CaptureSession {
         if outputWasAdded {
             do {
                 try stream.removeStreamOutput(streamOutput, type: .screen)
-            } catch where firstError == nil {
-                firstError = error
             } catch {
-                // Preserve the original stop error.
+                if firstError == nil {
+                    firstError = error
+                }
+                NSLog(
+                    "ScreenCaptureKit-Ausgabe konnte nicht entfernt werden: %@",
+                    error.localizedDescription
+                )
             }
             outputWasAdded = false
         }
@@ -258,6 +297,23 @@ final class CaptureSession {
             return .failure(firstError)
         }
         return .success(())
+    }
+
+    private func teardownAfterStartFailure() {
+        streamDelegate.prepareForStop()
+        if outputWasAdded {
+            do {
+                try stream.removeStreamOutput(streamOutput, type: .screen)
+            } catch {
+                NSLog(
+                    "ScreenCaptureKit-Ausgabe nach Startfehler nicht entfernbar: %@",
+                    error.localizedDescription
+                )
+            }
+            outputWasAdded = false
+        }
+        captureStarted = false
+        stopped = true
     }
 
     private func finishStopWaiters(

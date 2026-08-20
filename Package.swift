@@ -17,9 +17,22 @@ let package = Package(
         .target(
             name: "TeleprompterCore"
         ),
+        // Objective-C bridge to the private CGVirtualDisplay API. It lives in
+        // its own target because a single SwiftPM target cannot mix Swift and
+        // Objective-C sources. Compiled with ARC.
+        .target(
+            name: "VirtualDisplayBridge",
+            cSettings: [
+                .unsafeFlags(["-fobjc-arc"])
+            ],
+            linkerSettings: [
+                .linkedFramework("Foundation"),
+                .linkedFramework("CoreGraphics")
+            ]
+        ),
         .executableTarget(
             name: "TeleprompterMirror",
-            dependencies: ["TeleprompterCore"],
+            dependencies: ["TeleprompterCore", "VirtualDisplayBridge"],
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("AVFoundation"),
@@ -29,8 +42,8 @@ let package = Package(
                 .linkedFramework("CoreVideo"),
                 .linkedFramework("Metal"),
                 .linkedFramework("QuartzCore"),
-                .linkedFramework("ScreenCaptureKit"),
                 .linkedFramework("ServiceManagement"),
+                .linkedFramework("ScreenCaptureKit"),
                 .linkedFramework("SwiftUI")
             ]
         ),

@@ -2,32 +2,6 @@ import Foundation
 import Testing
 @testable import TeleprompterCore
 
-@Test("Initial capture sample is accepted without a complete status")
-func initialCaptureSampleIsAccepted() {
-    #expect(
-        CaptureFramePolicy.shouldDeliver(
-            statusRawValue: nil,
-            hasDeliveredInitialFrame: false
-        )
-    )
-}
-
-@Test("Idle capture samples are dropped after initialization")
-func idleCaptureSamplesAreDroppedAfterInitialization() {
-    #expect(
-        !CaptureFramePolicy.shouldDeliver(
-            statusRawValue: 1,
-            hasDeliveredInitialFrame: true
-        )
-    )
-    #expect(
-        CaptureFramePolicy.shouldDeliver(
-            statusRawValue: 0,
-            hasDeliveredInitialFrame: true
-        )
-    )
-}
-
 @Test("Teleprompter default mirrors horizontally at zero degrees")
 func teleprompterDefaultTransform() {
     let value = DisplayTransform.teleprompterDefault
@@ -213,21 +187,66 @@ func displayFallbackMustBeUnique() {
     )
 }
 
-@Test("Same-display configuration resolves one authoritative monitor")
-func sameDisplayConfigurationResolution() {
+@Test("Target configuration resolves one authoritative monitor")
+func targetConfigurationResolution() {
     let selected = identity(serial: 9, uuid: "SELECTED", name: "Prompter")
-    let configuration = SameDisplayConfiguration(
-        display: selected,
+    let configuration = TeleprompterConfiguration(
+        target: selected,
         transform: .teleprompterDefault
     )
 
-    #expect(configuration.resolvedDisplayIndex(among: [
+    #expect(configuration.resolvedTargetIndex(among: [
         identity(serial: 8, uuid: "OTHER", name: "Kontrolle"),
         selected
     ]) == 1)
-    #expect(SameDisplayConfiguration().resolvedDisplayIndex(
+    #expect(TeleprompterConfiguration().resolvedTargetIndex(
         among: [selected]
     ) == nil)
+}
+
+@Test("Legacy preset display key is decoded as the target")
+func legacyDisplayKeyDecodesAsTarget() throws {
+    struct LegacyConfiguration: Encodable {
+        let display: PersistentDisplayIdentity
+        let transform: DisplayTransform
+    }
+
+    let saved = identity(serial: 5, uuid: "LEGACY", name: "Prompter")
+    let legacy = LegacyConfiguration(
+        display: saved,
+        transform: DisplayTransform(
+            rotation: .degrees90,
+            mirrorHorizontally: true,
+            mirrorVertically: true
+        )
+    )
+    let data = try JSONEncoder().encode(legacy)
+    let decoded = try JSONDecoder().decode(
+        TeleprompterConfiguration.self,
+        from: data
+    )
+
+    #expect(decoded.target == saved)
+    #expect(decoded.transform.rotation == .degrees90)
+    #expect(decoded.transform.mirrorVertically)
+}
+
+@Test("Target configuration survives an encode/decode round trip")
+func targetConfigurationRoundTrip() throws {
+    let configuration = TeleprompterConfiguration(
+        target: identity(serial: 7, uuid: "PROMPTER", name: "Prompter"),
+        transform: DisplayTransform(
+            rotation: .degrees270,
+            mirrorHorizontally: false,
+            mirrorVertically: true
+        )
+    )
+    let decoded = try JSONDecoder().decode(
+        TeleprompterConfiguration.self,
+        from: JSONEncoder().encode(configuration)
+    )
+
+    #expect(decoded == configuration)
 }
 
 @Test("Settings normalize to exactly three named slots")
@@ -254,8 +273,8 @@ func settingsCodecRoundTrip() throws {
     settings.autoStartOutput = true
     settings.presets[1] = PresetSlot(
         name: "Teleprompter Bühne",
-        configuration: SameDisplayConfiguration(
-            display: identity(
+        configuration: TeleprompterConfiguration(
+            target: identity(
                 serial: 11,
                 uuid: "PROMPTER",
                 name: "Prompter"

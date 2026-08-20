@@ -361,26 +361,61 @@ public enum DisplayIdentityMatcher {
     }
 }
 
-public struct SameDisplayConfiguration: Codable, Equatable, Sendable {
-    public var display: PersistentDisplayIdentity?
+public struct TeleprompterConfiguration: Codable, Equatable, Sendable {
+    /// The physical display that shows the transformed teleprompter image.
+    /// The capture source is always the private virtual display, so only the
+    /// target has to be remembered.
+    public var target: PersistentDisplayIdentity?
     public var transform: DisplayTransform
 
     public init(
-        display: PersistentDisplayIdentity? = nil,
+        target: PersistentDisplayIdentity? = nil,
         transform: DisplayTransform = .teleprompterDefault
     ) {
-        self.display = display
+        self.target = target
         self.transform = transform
     }
 
-    public func resolvedDisplayIndex(
+    private enum CodingKeys: String, CodingKey {
+        case target
+        case display
+        case transform
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        // Presets saved by the earlier same-display build stored the physical
+        // display under `display`; reuse it as the target so upgrades keep the
+        // user's monitor choice.
+        let target = try container.decodeIfPresent(
+            PersistentDisplayIdentity.self,
+            forKey: .target
+        )
+        let legacy = try container.decodeIfPresent(
+            PersistentDisplayIdentity.self,
+            forKey: .display
+        )
+        self.target = target ?? legacy
+        transform = try container.decodeIfPresent(
+            DisplayTransform.self,
+            forKey: .transform
+        ) ?? .teleprompterDefault
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(target, forKey: .target)
+        try container.encode(transform, forKey: .transform)
+    }
+
+    public func resolvedTargetIndex(
         among candidates: [PersistentDisplayIdentity]
     ) -> Int? {
-        guard let display else {
+        guard let target else {
             return nil
         }
         return DisplayIdentityMatcher.uniqueMatch(
-            for: display,
+            for: target,
             among: candidates
         )
     }
@@ -388,11 +423,11 @@ public struct SameDisplayConfiguration: Codable, Equatable, Sendable {
 
 public struct PresetSlot: Codable, Equatable, Sendable {
     public var name: String
-    public var configuration: SameDisplayConfiguration
+    public var configuration: TeleprompterConfiguration
 
     public init(
         name: String,
-        configuration: SameDisplayConfiguration = .init()
+        configuration: TeleprompterConfiguration = .init()
     ) {
         self.name = name
         self.configuration = configuration

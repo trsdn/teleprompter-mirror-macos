@@ -28,16 +28,16 @@ final class OutputWindowController {
         onFailure: ((String) -> Void)? = nil
     ) throws {
         let window = PassiveOutputWindow(
-            contentRect: snapshot.nsScreen.frame,
+            contentRect: snapshot.targetScreen.frame,
             styleMask: [.borderless],
             backing: .buffered,
             defer: false,
-            screen: snapshot.nsScreen
+            screen: snapshot.targetScreen
         )
         let outputView = NSView(
             frame: NSRect(
                 origin: .zero,
-                size: snapshot.nsScreen.frame.size
+                size: snapshot.targetScreen.frame.size
             )
         )
         let renderer = try FrameRenderer(
@@ -69,7 +69,7 @@ final class OutputWindowController {
         ]
         window.animationBehavior = .none
         window.sharingType = .none
-        window.setFrame(snapshot.nsScreen.frame, display: false)
+        window.setFrame(snapshot.targetScreen.frame, display: false)
         window.orderOut(nil)
     }
 

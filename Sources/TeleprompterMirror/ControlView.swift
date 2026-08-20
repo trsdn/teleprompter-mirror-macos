@@ -69,7 +69,7 @@ struct ControlView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Teleprompter Mirror")
                         .font(.headline)
-                    Text("Den gewählten Monitor auf demselben Monitor spiegeln")
+                    Text("Virtuellen Quellmonitor gespiegelt auf den Zielmonitor ausgeben")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -115,10 +115,10 @@ struct ControlView: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("Monitor für Aufnahme und Ausgabe")
+                Text("Zielmonitor für die Ausgabe")
                     .font(.subheadline.weight(.semibold))
 
-                Picker("Monitor", selection: displayBinding) {
+                Picker("Zielmonitor", selection: displayBinding) {
                     Text("Bitte auswählen")
                         .tag(nil as CGDirectDisplayID?)
                     ForEach(model.displays) { display in
@@ -130,6 +130,10 @@ struct ControlView: View {
                 .pickerStyle(.menu)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .disabled(model.isRunning || model.isBusy)
+
+                Text("Quelle ist der virtuelle Monitor „Teleprompter Source“. Präsentation bzw. Fenster dorthin verschieben.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
 
                 if let hint = model.displayConnectionHint {
                     Text(hint)

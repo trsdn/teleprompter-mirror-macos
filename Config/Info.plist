@@ -34,6 +34,6 @@
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
     <key>NSScreenCaptureUsageDescription</key>
-    <string>Teleprompter Mirror benötigt Bildschirmaufnahmezugriff, um den ausgewählten Monitor transformiert auf demselben Monitor anzuzeigen.</string>
+    <string>Teleprompter Mirror benötigt Bildschirmaufnahmezugriff, um den privaten virtuellen Quellmonitor „Teleprompter Source“ zu erfassen und dessen Inhalt gespiegelt bzw. gedreht auf dem gewählten Zielmonitor anzuzeigen.</string>
 </dict>
 </plist>
