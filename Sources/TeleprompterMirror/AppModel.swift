@@ -1441,6 +1441,7 @@ final class AppModel: ObservableObject {
                 return
             }
             refreshDisplaySnapshot()
+            outputController?.refreshWindowLevel()
             await reconcileOutput()
         }
     }

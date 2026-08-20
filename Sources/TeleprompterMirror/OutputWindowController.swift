@@ -60,7 +60,7 @@ final class OutputWindowController {
         window.ignoresMouseEvents = true
         window.acceptsMouseMovedEvents = false
         window.isMovable = false
-        window.level = .floating
+        window.level = Self.outputLevel(for: snapshot.targetScreen)
         window.collectionBehavior = [
             .canJoinAllSpaces,
             .fullScreenAuxiliary,
@@ -78,8 +78,35 @@ final class OutputWindowController {
             return
         }
         renderer.start()
+        refreshWindowLevel()
         window.orderFrontRegardless()
         isVisible = true
+    }
+
+    /// The output must cover the target monitor completely, including its
+    /// menu bar and Dock, otherwise the teleprompter shows the frontmost
+    /// app's menus instead of the mirrored image. On a single-monitor setup
+    /// the menu bar stays reachable so the status item can still stop output.
+    func refreshWindowLevel() {
+        guard !isClosed else {
+            return
+        }
+        let level = Self.outputLevel(for: window.screen)
+        if window.level != level {
+            window.level = level
+        }
+    }
+
+    private static func outputLevel(for screen: NSScreen?) -> NSWindow.Level {
+        // A second monitor keeps the menu bar and status item reachable, so
+        // the output may cover the target monitor entirely.
+        guard let screen, NSScreen.screens.contains(where: { $0 != screen })
+        else {
+            return .floating
+        }
+        return NSWindow.Level(
+            rawValue: NSWindow.Level.mainMenu.rawValue + 1
+        )
     }
 
     func updateTransform(_ transform: DisplayTransform) {

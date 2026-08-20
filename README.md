@@ -244,9 +244,13 @@ erzeugen.
   daher nicht garantieren, dass die Orientierung im konkreten Spiegelglas-
   Aufbau korrekt ist – Drehung und Spiegelung sind entsprechend einzustellen.
 - Ist nur ein physischer Monitor verbunden, dient dieser als Ziel und die
-  Ausgabe überdeckt dort den Schreibtisch. Die Menüleiste bleibt über dem
-  klickdurchlässigen Ausgabefenster erreichbar, sodass das Statusmenü zum
-  Stoppen und erneuten Anzeigen der Steuerung verfügbar bleibt.
+  Ausgabe überdeckt dort den Schreibtisch. In diesem Fall bleibt die Menüleiste
+  bewusst über dem klickdurchlässigen Ausgabefenster erreichbar, damit das
+  Statusmenü zum Stoppen und erneuten Anzeigen der Steuerung verfügbar bleibt.
+  Sobald mindestens ein weiterer Monitor verbunden ist, deckt die Ausgabe den
+  Zielmonitor vollständig ab – inklusive dessen Menüleiste und Dock –, weil dort
+  sonst die Menüs der gerade aktiven App statt des gespiegelten Bildes zu sehen
+  wären.
 - Der virtuelle Monitor ist headless und verwendet einen 1920×1080-HiDPI-
   Framebuffer; Fenster müssen ggf. „blind“ dorthin verschoben werden.
 - DRM-/HDCP-geschützte Inhalte können von macOS **schwarz** geliefert werden.
