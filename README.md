@@ -293,6 +293,9 @@ Commit-Konventionen sowie der bewusst eng gehaltene Projektumfang sind in
 Sicherheitsrelevante Funde bitte **nicht** als Issue melden, sondern wie in
 [SECURITY.md](SECURITY.md) beschrieben über eine private Meldung.
 
+Für den Umgang miteinander gilt der
+[Verhaltenskodex](CODE_OF_CONDUCT.md).
+
 ## Lizenz
 
 [MIT](LICENSE) – Copyright © 2026 Torsten Mahr.

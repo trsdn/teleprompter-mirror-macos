@@ -74,3 +74,7 @@ spezialisierte Teleprompter-Anwendungen.
 Bitte nutze die [Issue-Vorlagen](https://github.com/trsdn/teleprompter-mirror-macos/issues/new/choose).
 Sicherheitsrelevante Funde bitte **nicht** als Issue anlegen, sondern wie in
 [SECURITY.md](SECURITY.md) beschrieben melden.
+
+## Umgang miteinander
+
+Für alle Projektbereiche gilt der [Verhaltenskodex](CODE_OF_CONDUCT.md).
