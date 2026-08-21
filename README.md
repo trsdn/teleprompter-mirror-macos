@@ -1,79 +1,75 @@
 # Teleprompter Mirror
 
-Teleprompter Mirror ist eine eigenständige native macOS-App für einen
-Teleprompter- oder Spiegelglas-Aufbau. Sie erzeugt einen **privaten virtuellen
-Quellmonitor**, erfasst diesen mit ScreenCaptureKit, spiegelt bzw. dreht das
-Bild und zeigt das Ergebnis vollflächig auf einem **physischen Zielmonitor**.
-Das Seitenverhältnis bleibt erhalten; freie Flächen sind schwarz.
+Teleprompter Mirror is a standalone native macOS app for a teleprompter or
+beam-splitter setup. It creates a **private virtual source display**, captures
+it with ScreenCaptureKit, mirrors or rotates the image, and shows the result
+full-screen on a **physical target display**. The aspect ratio is preserved;
+unused areas stay black.
 
-Die Präsentation (PowerPoint, Keynote, Browser …) wird auf den virtuellen
-Quellmonitor gelegt; der physische Zielmonitor – standardmäßig ein Monitor
-namens **AAA**, sofern vorhanden – zeigt den gespiegelten/gedrehten Stream.
-Weil Quelle und Ziel getrennt sind, verdeckt die Vollbildausgabe die Quelle
-nicht und es entsteht keine optische Endlosschleife.
+The presentation (PowerPoint, Keynote, browser …) is placed on the virtual
+source display; the physical target display — by default a display named
+**AAA**, if present — shows the mirrored/rotated stream. Because source and
+target are separate, the full-screen output never covers the source and no
+optical feedback loop occurs.
 
-Es gibt keine Drittanbieterpakete oder dauerhaft installierten Daemons. Eine
-zweite Instanz derselben signierten Binary läuft während der App-Laufzeit
-headless als lokaler Display-Host.
+There are no third-party packages and no permanently installed daemons. A
+second instance of the same signed binary runs headless as a local display host
+for the lifetime of the app.
 
-## Warum ein virtueller Quellmonitor
+## Why a virtual source display
 
-Eine Aufnahme desselben physischen Monitors, auf dem auch die Vollbildausgabe
-liegt, ist nicht sinnvoll: Die Ausgabe überdeckt die Quelle. Deshalb erzeugt
-die App über die **private CoreGraphics-API** (`CGVirtualDisplay`,
-`CGVirtualDisplayDescriptor`, `CGVirtualDisplaySettings`,
-`CGVirtualDisplayMode`) einen synthetischen Monitor „Teleprompter Source“ mit
-`1920×1080@60`.
+Capturing the same physical display that also carries the full-screen output
+does not work: the output covers the source. The app therefore creates a
+synthetic display named "Teleprompter Source" at `1920×1080@60` through the
+**private CoreGraphics API** (`CGVirtualDisplay`, `CGVirtualDisplayDescriptor`,
+`CGVirtualDisplaySettings`, `CGVirtualDisplayMode`).
 
-- Die privaten Klassen werden ausschließlich über `NSClassFromString`
-  instanziiert (siehe `Sources/VirtualDisplayBridge`, ein separater
-  Objective-C-Ziel­baustein mit ARC). Es werden keine privaten Symbole
-  gelinkt.
-- Der Hauptprozess startet dieselbe signierte Binary mit einem internen
-  Headless-Argument. Nur dieser Display-Host hält das `CGVirtualDisplay`-
-  Objekt; der Hauptprozess verwendet ausschließlich ScreenCaptureKit und die
-  Ausgabe. Diese Prozessgrenze ist auf macOS 26 erforderlich, weil ein normal
-  über Finder/LaunchServices gestarteter Prozess für einen selbst erzeugten
-  virtuellen Monitor keine zuverlässigen Capture-Callbacks erhält.
-- Der Display-Host beendet sich zusammen mit dem Hauptprozess; der virtuelle
-  Monitor verschwindet dadurch spätestens eine Sekunde nach dem App-Ende.
-- Der virtuelle Monitor erhält eine stabile synthetische Kennung
-  (Hersteller/Produkt/Seriennummer) und sRGB-Primärfarben, damit ein Preset
-  ihn nicht mit echter Hardware verwechselt.
+- The private classes are instantiated exclusively through `NSClassFromString`
+  (see `Sources/VirtualDisplayBridge`, a separate Objective-C target with ARC).
+  No private symbols are linked.
+- The main process launches the same signed binary with an internal headless
+  argument. Only this display host holds the `CGVirtualDisplay` object; the
+  main process uses ScreenCaptureKit and the output only. This process boundary
+  is required on macOS 26, because a process started normally through
+  Finder/LaunchServices does not receive reliable capture callbacks for a
+  virtual display it created itself.
+- The display host exits together with the main process; the virtual display
+  therefore disappears at most one second after the app ends.
+- The virtual display gets a stable synthetic identity (vendor/product/serial)
+  and sRGB primaries so that a preset does not confuse it with real hardware.
 
-Der Display-Host meldet die tatsächliche `CGDirectDisplayID` einmalig über
-eine private Pipe an den Hauptprozess. Als Aufnahmequelle dient ausschließlich
-der `SCDisplay` mit exakt dieser ID. ScreenCaptureKit wird dafür kurz und
-begrenzt erneut abgefragt; es gibt keinen Fallback über Namen, Position oder
-den zuletzt erschienenen Monitor. Nach der ersten Erkennung wartet die App
-einmalig fünf Sekunden, weil macOS 26 einen neuen virtuellen Monitor bereits
-auflisten kann, bevor dessen Capture-Framebuffer bereit ist. Der Filter
-verwendet `excludingWindows: []`, da App- und Ausgabefenster auf physischen
-Monitoren liegen und niemals auf der virtuellen Quelle erscheinen.
+The display host reports the actual `CGDirectDisplayID` to the main process
+once through a private pipe. The capture source is exclusively the `SCDisplay`
+with exactly that ID. ScreenCaptureKit is re-queried briefly and with a bound
+for this; there is no fallback by name, position, or most recently appeared
+display. After the first detection the app waits once for five seconds, because
+macOS 26 can already list a new virtual display before its capture framebuffer
+is ready. The filter uses `excludingWindows: []`, since the app and output
+windows live on physical displays and never appear on the virtual source.
 
-Das Vollbild-Ausgabefenster ist randlos, klickdurchlässig, wird nie zum Haupt-
-oder Tastaturfenster und aktiviert die App nicht. Vor dem Start wird das
-Steuerfenster nach Möglichkeit auf einen anderen physischen Monitor
-verschoben – niemals auf den unsichtbaren virtuellen Monitor.
+The full-screen output window is borderless, click-through, never becomes the
+main or key window, and does not activate the app. Before starting, the control
+window is moved to another physical display where possible — never to the
+invisible virtual display.
 
-## Teleprompter-Aufbau
+## Teleprompter setup
 
-1. Den physischen Zielmonitor so platzieren, dass er in das Spiegelglas
-   strahlt.
-2. Das Glas typischerweise ungefähr im 45°-Winkel vor der Kamera montieren.
-3. Standardmäßig ist **Horizontal spiegeln** bei **0°** aktiv. Je nach
-   physischem Aufbau Drehung und vertikale Spiegelung anpassen.
-4. Die Sprecheransicht bzw. Präsentation auf den virtuellen Monitor
-   „Teleprompter Source“ ziehen und die Schriftgröße für den tatsächlichen
-   Kameraabstand wählen.
+1. Place the physical target display so that it projects into the beam
+   splitter.
+2. Mount the glass typically at roughly a 45° angle in front of the camera.
+3. **Flip horizontally** at **0°** is active by default. Adjust rotation and
+   vertical flipping to match the physical setup.
+4. Drag the presenter view or presentation onto the virtual display
+   "Teleprompter Source" and choose a font size that suits the actual camera
+   distance.
 
-## Voraussetzungen
+## Requirements
 
-- macOS 13 Ventura oder neuer
-- Xcode oder Command Line Tools mit Swift 6
-- Bildschirmaufnahme-Berechtigung für das gebaute App-Bundle
+- macOS 13 Ventura or newer
+- Xcode or Command Line Tools with Swift 6
+- Screen recording permission for the built app bundle
 
-## Bauen und testen
+## Build and test
 
 ```bash
 git clone https://github.com/trsdn/teleprompter-mirror-macos.git
@@ -82,147 +78,142 @@ swift test
 ./build-app.sh
 ```
 
-Das Skript erstellt `dist/Teleprompter Mirror.app`. Es bevorzugt automatisch
-eine vorhandene Identität vom Typ **Developer ID Application**, verwendet
-ersatzweise **Apple Development** und fällt nur ohne stabile Identität mit
-Warnung auf eine Ad-hoc-Signatur zurück. Es gibt keine fest eingetragene Team-
-oder Zertifikatskennung. Eine Identität kann ausdrücklich gesetzt werden:
+The script creates `dist/Teleprompter Mirror.app`. It automatically prefers an
+existing **Developer ID Application** identity, falls back to **Apple
+Development**, and only falls back to an ad-hoc signature — with a warning — if
+no stable identity exists. There is no hard-coded team or certificate
+identifier. An identity can be set explicitly:
 
 ```bash
 CODE_SIGN_IDENTITY="Developer ID Application: Name (TEAMID)" ./build-app.sh
 ```
 
-Das Skript signiert mit Hardened Runtime; Developer-ID-Builds erhalten einen
-Apple-Zeitstempel.
+The script signs with Hardened Runtime; Developer ID builds get an Apple
+timestamp.
 
-### Optionaler Laufzeit-Selbsttest
+### Optional runtime self-test
 
-Nur wenn **Teleprompter Mirror selbst** bereits Bildschirmaufnahmezugriff hat,
-kann der signierte Build ohne neuen Berechtigungsdialog getestet werden:
+Only if **Teleprompter Mirror itself** already has screen recording access can
+the signed build be tested without a new permission dialog:
 
 ```bash
 open "dist/Teleprompter Mirror.app" --args --self-test
 ```
 
-Der Test erstellt den virtuellen Quellmonitor, wählt den Standard-Zielmonitor,
-startet die Ausgabe und meldet `SELF_TEST_PASS`, sobald ein vollständiger Frame
-des virtuellen Quellmonitors angenommen wurde und die Ausgabeschicht den
-Rendering-Status meldet – andernfalls `SELF_TEST_FAIL`. Ohne vorhandene
-Berechtigung meldet er `SELF_TEST_SKIP`; er fordert sie nicht an und verändert
-keine TCC-Einstellung. Der Test ersetzt keine Sichtprüfung: Er trifft weder
-eine Aussage über tatsächlich sichtbare Pixel noch darüber, ob die Spiegelung
-im physischen Aufbau korrekt orientiert ist.
+The test creates the virtual source display, selects the default target
+display, starts the output, and reports `SELF_TEST_PASS` as soon as a complete
+frame of the virtual source display has been accepted and the output layer
+reports the rendering status — otherwise `SELF_TEST_FAIL`. Without the
+permission it reports `SELF_TEST_SKIP`; it does not request the permission and
+does not change any TCC setting. The test does not replace a visual check: it
+says nothing about actually visible pixels, nor about whether the mirroring is
+correctly oriented in the physical setup.
 
-## Bedienung
+## Usage
 
-1. Einen der drei Preset-Slots auswählen und bei Bedarf benennen.
-2. Den physischen **Zielmonitor** für die Ausgabe auswählen (Vorgabe: **AAA**,
-   sonst der kleinste externe Monitor).
-3. Drehung `0°`, `90°`, `180°` oder `270°` sowie horizontale und vertikale
-   Spiegelung einstellen.
-4. **Preset speichern** wählen.
-5. Bildschirmaufnahme erlauben.
-6. Die Präsentation auf den virtuellen Monitor „Teleprompter Source“ ziehen.
-7. **Ausgabe starten** wählen.
+1. Select one of the three preset slots and name it if needed.
+2. Select the physical **target display** for the output (default: **AAA**,
+   otherwise the smallest external display).
+3. Set the rotation to `0°`, `90°`, `180°`, or `270°` and choose horizontal and
+   vertical flipping.
+4. Choose **Save preset**.
+5. Allow screen recording.
+6. Drag the presentation onto the virtual display "Teleprompter Source".
+7. Choose **Start output**.
 
-Alle freien Flächen bleiben durch proportionale Einpassung schwarz.
-Transformationen können während der Ausgabe geändert werden.
+All unused areas stay black through proportional fitting. Transforms can be
+changed while the output is running.
 
-### Stoppen und Steuerung
+### Stopping and control
 
-- **Stoppen** im Steuerfenster
-- `⌘.` solange das App-Menü bzw. Steuerfenster aktiv ist
-- **Ausgabe stoppen** im Statusmenü der macOS-Menüleiste
-- **Teleprompter Mirror beenden** im Statusmenü oder App-Menü
+- **Stop** in the control window
+- `⌘.` while the app menu or control window is active
+- **Stop output** in the status menu of the macOS menu bar
+- **Quit Teleprompter Mirror** in the status menu or app menu
 
-`Escape` kann im aktiven Steuer-/Menükontext den dortigen Abbruch auslösen.
-Das passive Ausgabefenster wird absichtlich nie zum Tastaturfenster und kann
-`Escape` deshalb nicht selbst empfangen. Das Statusmenü bleibt der
-zuverlässige Stoppweg, auch wenn das Steuerfenster verdeckt oder geschlossen
-ist. Es werden keine globalen Tastatur-Event-Taps installiert.
+`Escape` can trigger the local cancel action in an active control or menu
+context. The passive output window deliberately never becomes the key window
+and therefore cannot receive `Escape` itself. The status menu stays the
+reliable way to stop, even when the control window is covered or closed. No
+global keyboard event taps are installed.
 
-## Rendering und Ressourcenverbrauch
+## Rendering and resource usage
 
-Die Aufnahme ist auf 30 Hz und `queueDepth = 4` begrenzt. Nur
-ScreenCaptureKit-Screen-Samples mit Frame-Status `complete`, gültigem
-Sample-Buffer und `CVPixelBuffer` werden weitergereicht. Die Capture-Fläche
-entspricht mit BGRA `1920×1080` exakt dem virtuellen Quellmodus; Audio ist aus,
-der Mauszeiger ist sichtbar.
+Capture is limited to 30 Hz and `queueDepth = 4`. Only ScreenCaptureKit screen
+samples with frame status `complete`, a valid sample buffer, and a
+`CVPixelBuffer` are forwarded. With BGRA `1920×1080` the capture surface matches
+the virtual source mode exactly; audio is off and the pointer is visible.
 
-Der bevorzugte Pfad
-`ScreenCaptureKit → AVSampleBufferDisplayLayer` reicht IOSurface-gestützte
-BGRA-Puffer readiness- und backpressure-gesteuert direkt weiter; Frames werden
-nicht angestaut. Eine Sitzung kann höchstens einmal auf
-`Core Image → CALayer` zurückfallen. Dieser sichere Fallback hält nur den
-neuesten Frame und erzeugt Kontext und 30-Hz-Timer erst bei Bedarf. Beim
-Stoppen werden Frame, Timer, Layer und Kontext freigegeben. Die App verwendet
-kein `MTKView`. Eine zunächst leere virtuelle Quelle bleibt aktiv, damit
-PowerPoint oder ein anderes Fenster auch später auf den virtuellen Desktop
-verschoben werden kann. Echte Stream- und Renderfehler werden weiterhin
-explizit gemeldet.
+The preferred path `ScreenCaptureKit → AVSampleBufferDisplayLayer` forwards
+IOSurface-backed BGRA buffers directly, driven by readiness and backpressure;
+frames are not queued up. A session can fall back to `Core Image → CALayer` at
+most once. This safe fallback keeps only the newest frame and creates the
+context and 30 Hz timer only when needed. On stop, frame, timer, layer, and
+context are released. The app does not use `MTKView`. An initially empty virtual
+source stays active so that PowerPoint or another window can still be moved to
+the virtual desktop later. Real stream and render errors are still reported
+explicitly.
 
-Der vollständige Finder-/LaunchServices-Pfad wurde auf macOS 26.6.1 mit einem
-asymmetrischen L/R-Testbild auf dem physischen Zielmonitor AAA visuell geprüft:
-Das rote `R` erschien links und das gelbe `L` rechts, die horizontale
-Spiegelung war damit korrekt.
+The full Finder/LaunchServices path was visually verified on macOS 26.6.1 with
+an asymmetric L/R test image on the physical target display AAA: the red `R`
+appeared on the left and the yellow `L` on the right, so the horizontal
+mirroring was correct.
 
-## Presets und Monitoridentität
+## Presets and display identity
 
-Jeder der drei benannten Presets speichert genau eine **Zielmonitoridentität**
-und die Transformation per `Codable` in `UserDefaults`. Die Quelle ist immer
-der virtuelle Monitor und muss nicht gespeichert werden. Presets aus der
-früheren Version, die noch eine Monitoridentität unter `display` gespeichert
-haben, werden weiterhin als Zielmonitor übernommen. Eine Identität kombiniert,
-soweit verfügbar:
+Each of the three named presets stores exactly one **target display identity**
+and the transform through `Codable` in `UserDefaults`. The source is always the
+virtual display and does not need to be stored. Presets from the earlier version
+that still store a display identity under `display` are still adopted as the
+target display. An identity combines, where available:
 
-- Hersteller-, Produkt- und Seriennummer
-- stabile Display-UUID
-- als eindeutigen Fallback normalisierten Namen und rotationsunabhängige native
-  Pixelabmessungen
+- vendor, product, and serial number
+- stable display UUID
+- as a unique fallback, the normalized name and rotation-independent native
+  pixel dimensions
 
-Eine flüchtige `CGDirectDisplayID` wird nie allein oder dauerhaft gespeichert.
-Mehrdeutige Treffer werden nicht automatisch verwendet.
+A volatile `CGDirectDisplayID` is never stored alone or persistently. Ambiguous
+matches are not used automatically.
 
-## Berechtigung, Anmeldestart und Wiederverbinden
+## Permission, launch at login, and reconnecting
 
-Unter **Systemeinstellungen → Datenschutz & Sicherheit → Bildschirmaufnahme**
-muss das konkrete signierte App-Bundle erlaubt sein. Eine stabile Signatur,
-Bundle-ID und ein stabiler App-Pfad helfen macOS, die Berechtigung nach Builds
-wiederzuerkennen. Das Erstellen des virtuellen Monitors selbst benötigt keine
-Bildschirmaufnahme-Berechtigung; nur seine Erfassung.
+Under **System Settings → Privacy & Security → Screen Recording** the specific
+signed app bundle has to be allowed. A stable signature, bundle ID, and stable
+app path help macOS recognize the permission again after builds. Creating the
+virtual display itself needs no screen recording permission; only capturing it
+does.
 
-**Bei Anmeldung starten** verwendet `SMAppService.mainApp`. Für zuverlässigen
-Anmeldestart sollte die signierte App zuerst nach `/Applications` verschoben
-und von dort registriert werden. **Ausgabe beim App-Start automatisch starten**
-ist eine getrennte Option.
+**Launch at login** uses `SMAppService.mainApp`. For a reliable launch at login,
+the signed app should first be moved to `/Applications` and registered from
+there. **Start output automatically when the app launches** is a separate
+option.
 
-Fehlt beim Start der gespeicherte Zielmonitor oder wird er getrennt, wartet die
-App ohne Polling auf `didChangeScreenParametersNotification`. Bei eindeutiger
-Rückkehr startet eine gewünschte automatische Ausgabe wieder. Ein manueller
-Stopp unterdrückt jeden automatischen Neustart für die laufende App-Sitzung;
-erst ein ausdrückliches **Ausgabe starten** hebt die Unterdrückung auf.
-Aufnahme- oder Renderfehler werden blockiert, statt Neustartschleifen zu
-erzeugen.
+If the saved target display is missing at launch or gets disconnected, the app
+waits for `didChangeScreenParametersNotification` without polling. On an
+unambiguous return, a requested automatic output starts again. A manual stop
+suppresses every automatic restart for the running app session; only an explicit
+**Start output** lifts the suppression. Capture or render errors block instead
+of creating restart loops.
 
-## Einschränkungen
+## Limitations
 
-- Die App nutzt eine **private, nicht dokumentierte** CoreGraphics-API für den
-  virtuellen Monitor. Diese kann sich zwischen macOS-Versionen ändern und ist
-  **nicht App-Store-tauglich**. Ist die API nicht verfügbar, meldet die App
-  dies und startet keine Ausgabe.
-- Die Spiegelung erfolgt in der Ausgabe-Ebene (Core Animation / Core Image).
-  Es findet **kein** physischer Scanout-Flip des Monitors statt; die App kann
-  daher nicht garantieren, dass die Orientierung im konkreten Spiegelglas-
-  Aufbau korrekt ist – Drehung und Spiegelung sind entsprechend einzustellen.
-- Ist nur ein physischer Monitor verbunden, dient dieser als Ziel und die
-  Ausgabe überdeckt dort den Schreibtisch. Die Menüleiste bleibt über dem
-  klickdurchlässigen Ausgabefenster erreichbar, sodass das Statusmenü zum
-  Stoppen und erneuten Anzeigen der Steuerung verfügbar bleibt.
-- Der virtuelle Monitor ist headless und verwendet einen 1920×1080-HiDPI-
-  Framebuffer; Fenster müssen ggf. „blind“ dorthin verschoben werden.
-- DRM-/HDCP-geschützte Inhalte können von macOS **schwarz** geliefert werden.
-- Audio wird nicht übertragen; der Mauszeiger wird erfasst.
-- Seriennummernlose, identische Zielmonitore ohne eindeutige UUID, Namen oder
-  native Abmessungen erfordern eine erneute manuelle Auswahl.
-- Das Build-Skript erzeugt standardmäßig die aktuelle Mac-Architektur, kein
-  Universal Binary.
+- The app uses a **private, undocumented** CoreGraphics API for the virtual
+  display. It can change between macOS versions and is **not App Store
+  compatible**. If the API is unavailable, the app reports this and does not
+  start the output.
+- Mirroring happens in the output layer (Core Animation / Core Image). There is
+  **no** physical scanout flip of the display, so the app cannot guarantee that
+  the orientation is correct in a specific beam-splitter setup — rotation and
+  flipping have to be set accordingly.
+- If only one physical display is connected, it serves as the target and the
+  output covers the desktop there. The menu bar stays reachable above the
+  click-through output window, so the status menu remains available for stopping
+  and for showing the control window again.
+- The virtual display is headless and uses a 1920×1080 HiDPI framebuffer;
+  windows may have to be moved there "blindly".
+- DRM/HDCP-protected content can be delivered **black** by macOS.
+- Audio is not transmitted; the pointer is captured.
+- Identical target displays without a serial number, unique UUID, name, or
+  native dimensions require a manual selection again.
+- By default the build script produces the current Mac architecture, not a
+  universal binary.

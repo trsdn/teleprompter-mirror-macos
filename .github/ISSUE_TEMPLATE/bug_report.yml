@@ -1,0 +1,61 @@
+name: Report a bug
+description: Report reproducible app misbehavior.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for the report. Please fill out the fields as completely as possible —
+        target display and macOS version are especially important for analysis.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happens, and what did you expect instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start the app
+        2. Select a target display
+        3. …
+    validations:
+      required: true
+
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: "e.g. 15.3 or 26.0"
+    validations:
+      required: true
+
+  - type: input
+    id: hardware
+    attributes:
+      label: Mac model and display setup
+      placeholder: "e.g. MacBook Pro M3 with one external 1920×1080 display"
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Shown in the About dialog or in `Config/Info.plist`.
+      placeholder: "e.g. 1.0.1 (2)"
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log output
+      description: |
+        Optional, but very helpful:
+        `log show --last 5m --predicate 'subsystem == "com.github.trsdn.TeleprompterMirror"' --style compact`
+      render: text

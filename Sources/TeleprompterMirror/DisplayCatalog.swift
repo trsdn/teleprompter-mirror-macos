@@ -38,13 +38,13 @@ enum DisplayResolutionError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .virtualSourceUnavailable:
-            return "Der virtuelle Quellmonitor ist für die Bildschirmaufnahme nicht verfügbar."
+            return "The virtual source display is not available for screen capture."
         case let .screenCaptureSourceUnavailable(displayID):
-            return "ScreenCaptureKit hat den virtuellen Quellmonitor mit ID \(displayID) nicht gefunden."
+            return "ScreenCaptureKit did not find the virtual source display with ID \(displayID)."
         case .targetDisplayUnavailable:
-            return "Der gewählte Zielmonitor ist nicht eindeutig verbunden."
+            return "The selected target display is not unambiguously connected."
         case .configurationChanged:
-            return "Die Monitorkonfiguration hat sich während des Starts geändert."
+            return "The display configuration changed while starting."
         }
     }
 }
@@ -242,7 +242,7 @@ enum DisplayCatalog {
 
         if let lastEnumerationError {
             NSLog(
-                "ScreenCaptureKit-Aufzählung für Display %u fehlgeschlagen: %@",
+                "ScreenCaptureKit enumeration failed for display %u: %@",
                 displayID,
                 lastEnumerationError.localizedDescription
             )
