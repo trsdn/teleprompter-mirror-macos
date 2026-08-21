@@ -24,15 +24,15 @@ enum VirtualDisplayHostError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .executableUnavailable:
-            return "Die ausführbare App-Datei wurde nicht gefunden."
+            return "The app executable was not found."
         case let .launchFailed(message):
-            return "Der Display-Host konnte nicht gestartet werden: \(message)"
+            return "The display host could not be started: \(message)"
         case let .exitedBeforeReady(status):
             return "Der Display-Host wurde vorzeitig beendet (Status \(status))."
         case let .invalidResponse(response):
-            return "Der Display-Host meldete eine ungültige Antwort: \(response)"
+            return "The display host reported an invalid response: \(response)"
         case .startupTimedOut:
-            return "Der Display-Host wurde nicht rechtzeitig bereit."
+            return "The display host did not become ready in time."
         }
     }
 }

@@ -7,10 +7,29 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
+    name: Build and tests
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Build
+        run: swift build
       - name: Test
         run: swift test
+
+  bundle:
+    name: App bundle
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Build bundle
+        # Without a certificate in the runner, ad-hoc signing is used; this is
+        # enough to check the bundle structure and Info.plist.
+        run: ./build-app.sh
+      - name: Check bundle
+        run: test -x "dist/Teleprompter Mirror.app/Contents/MacOS/TeleprompterMirror"

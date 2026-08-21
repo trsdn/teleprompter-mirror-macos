@@ -1,0 +1,36 @@
+name: Feature request
+description: Suggest an idea or improvement.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem should be solved?
+      description: Describe the use case, not just the desired solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Does the request fit the project scope?
+      description: |
+        The app intentionally remains lean: capture the virtual source display,
+        mirror/rotate it, and output it on a target display. No text editor, no
+        script prompter.
+      options:
+        - label: Yes, the request fits this scope.
+          required: true

@@ -69,7 +69,7 @@ struct ControlView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Teleprompter Mirror")
                         .font(.headline)
-                    Text("Virtuellen Quellmonitor gespiegelt auf den Zielmonitor ausgeben")
+                    Text("Mirror the virtual source display onto the target display")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -91,13 +91,13 @@ struct ControlView: View {
                 .disabled(model.isBusy)
 
                 HStack {
-                    TextField("Preset-Name", text: presetNameBinding)
+                    TextField("Preset name", text: presetNameBinding)
                         .textFieldStyle(.roundedBorder)
-                    Button("Neu laden") {
+                    Button("Reload") {
                         model.reloadActivePreset()
                     }
                     .disabled(model.isBusy)
-                    Button("Preset speichern") {
+                    Button("Save preset") {
                         model.saveCurrentConfigurationToActivePreset()
                     }
                     .disabled(!model.canSavePreset)
@@ -106,7 +106,7 @@ struct ControlView: View {
 
                 if model.configurationIsDirty {
                     Label(
-                        "Ungespeicherte Änderungen",
+                        "Unsaved changes",
                         systemImage: "circle.fill"
                     )
                     .font(.caption2)
@@ -115,11 +115,11 @@ struct ControlView: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("Zielmonitor für die Ausgabe")
+                Text("Target display for the output")
                     .font(.subheadline.weight(.semibold))
 
-                Picker("Zielmonitor", selection: displayBinding) {
-                    Text("Bitte auswählen")
+                Picker("Target display", selection: displayBinding) {
+                    Text("Please select")
                         .tag(nil as CGDirectDisplayID?)
                     ForEach(model.displays) { display in
                         Text(display.label)
@@ -131,7 +131,7 @@ struct ControlView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .disabled(model.isRunning || model.isBusy)
 
-                Text("Quelle ist der virtuelle Monitor „Teleprompter Source“. Präsentation bzw. Fenster dorthin verschieben.")
+                Text("The source is the virtual display \"Teleprompter Source\". Move the presentation or window there.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
 
@@ -149,9 +149,9 @@ struct ControlView: View {
 
             VStack(alignment: .leading, spacing: 7) {
                 HStack {
-                    Text("Drehung")
+                    Text("Rotation")
                         .font(.subheadline.weight(.semibold))
-                    Picker("Drehung", selection: rotationBinding) {
+                    Picker("Rotation", selection: rotationBinding) {
                         ForEach(DisplayRotation.allCases, id: \.rawValue) {
                             rotation in
                             Text("\(rotation.rawValue)°").tag(rotation)
@@ -163,15 +163,15 @@ struct ControlView: View {
 
                 HStack(spacing: 18) {
                     Toggle(
-                        "Horizontal spiegeln",
+                        "Flip horizontally",
                         isOn: horizontalMirrorBinding
                     )
                     Toggle(
-                        "Vertikal spiegeln",
+                        "Flip vertically",
                         isOn: verticalMirrorBinding
                     )
                     Spacer()
-                    Button("Standard") {
+                    Button("Reset") {
                         model.resetTransform()
                     }
                     .controlSize(.small)
@@ -181,7 +181,7 @@ struct ControlView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Toggle(
-                    "Ausgabe beim App-Start automatisch starten",
+                    "Start output automatically when the app launches",
                     isOn: Binding(
                         get: { model.autoStartOutput },
                         set: { model.setAutoStartOutput($0) }
@@ -190,7 +190,7 @@ struct ControlView: View {
 
                 HStack {
                     Toggle(
-                        "Bei Anmeldung starten",
+                        "Launch at login",
                         isOn: Binding(
                             get: { model.loginItemEnabled },
                             set: { model.setLoginItemEnabled($0) }
@@ -202,7 +202,7 @@ struct ControlView: View {
                             .controlSize(.mini)
                     }
                     if model.loginItemNeedsApproval {
-                        Button("Systemeinstellungen öffnen") {
+                        Button("Open System Settings") {
                             model.openLoginItemsSettings()
                         }
                         .controlSize(.small)
@@ -217,7 +217,7 @@ struct ControlView: View {
 
                 if !model.appIsInApplicationsFolder {
                     Text(
-                        "Für einen zuverlässigen Anmeldestart die signierte App nach /Applications verschieben und dort registrieren."
+                        "For a reliable launch at login, move the signed app to /Applications and register it there."
                     )
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -243,14 +243,14 @@ struct ControlView: View {
 
             if !model.permissionGranted {
                 HStack {
-                    Button("Zugriff anfordern") {
+                    Button("Request access") {
                         model.requestPermission()
                     }
-                    Button("Systemeinstellungen öffnen") {
+                    Button("Open System Settings") {
                         model.openScreenRecordingSettings()
                     }
                     Spacer()
-                    Button("Status prüfen") {
+                    Button("Check status") {
                         model.updatePermissionStatus()
                     }
                 }
@@ -261,7 +261,7 @@ struct ControlView: View {
                 Button {
                     model.refreshDisplays()
                 } label: {
-                    Label("Monitore aktualisieren", systemImage: "arrow.clockwise")
+                    Label("Refresh displays", systemImage: "arrow.clockwise")
                 }
                 .disabled(model.isBusy)
 
@@ -273,12 +273,12 @@ struct ControlView: View {
                 }
 
                 if model.isRunning || model.isBusy {
-                    Button("Stoppen", role: .destructive) {
+                    Button("Stop", role: .destructive) {
                         model.requestStop()
                     }
                     .keyboardShortcut(.cancelAction)
                 } else {
-                    Button("Ausgabe starten") {
+                    Button("Start output") {
                         Task { @MainActor in
                             await model.start()
                         }

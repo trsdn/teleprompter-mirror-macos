@@ -10,7 +10,7 @@ DIST_DIR="${SCRIPT_DIR}/dist"
 APP_DIR="${DIST_DIR}/${APP_NAME}"
 
 if [[ "${CONFIGURATION}" != "release" && "${CONFIGURATION}" != "debug" ]]; then
-    printf 'Fehler: CONFIGURATION muss "release" oder "debug" sein.\n' >&2
+    printf 'Error: CONFIGURATION has to be "release" or "debug".\n' >&2
     exit 2
 fi
 
@@ -35,7 +35,7 @@ else
     SIGN_IDENTITY="${SIGN_IDENTITY:--}"
 fi
 
-printf 'Baue %s (%s) …\n' "${PRODUCT_NAME}" "${CONFIGURATION}"
+printf 'Building %s (%s) …\n' "${PRODUCT_NAME}" "${CONFIGURATION}"
 swift build \
     --package-path "${SCRIPT_DIR}" \
     --configuration "${CONFIGURATION}" \
@@ -50,7 +50,7 @@ BIN_DIR="$(
 EXECUTABLE="${BIN_DIR}/${PRODUCT_NAME}"
 
 if [[ ! -x "${EXECUTABLE}" ]]; then
-    printf 'Fehler: Ausführbare Datei wurde nicht erzeugt: %s\n' "${EXECUTABLE}" >&2
+    printf 'Error: executable was not produced: %s\n' "${EXECUTABLE}" >&2
     exit 1
 fi
 
@@ -61,9 +61,9 @@ install -m 0644 "${SCRIPT_DIR}/Config/Info.plist" "${APP_DIR}/Contents/Info.plis
 
 plutil -lint "${APP_DIR}/Contents/Info.plist"
 
-printf 'Signiere App mit Identität "%s" …\n' "${SIGN_IDENTITY}"
+printf 'Signing app with identity "%s" …\n' "${SIGN_IDENTITY}"
 if [[ "${SIGN_IDENTITY}" == "-" ]]; then
-    printf 'Warnung: Keine stabile Codesignatur gefunden. Bei ad-hoc signierten Rebuilds kann macOS die Bildschirmaufnahme-Berechtigung erneut verlangen.\n' >&2
+    printf 'Warning: no stable code signature found. With ad-hoc signed rebuilds, macOS may ask for the screen recording permission again.\n' >&2
 fi
 
 TIMESTAMP_ARGUMENT="--timestamp=none"
@@ -80,5 +80,5 @@ codesign \
 
 codesign --verify --deep --strict --verbose=2 "${APP_DIR}"
 
-printf '\nFertig: %s\n' "${APP_DIR}"
-printf 'Starten: open "%s"\n' "${APP_DIR}"
+printf '\nDone: %s\n' "${APP_DIR}"
+printf 'Launch: open "%s"\n' "${APP_DIR}"

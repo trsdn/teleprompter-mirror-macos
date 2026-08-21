@@ -89,13 +89,13 @@ private final class DirectSampleBufferPresenter: @unchecked Sendable {
         if CVPixelBufferGetIOSurface(pixelBuffer) == nil {
             isActive = false
             event = .failed(
-                reason: "Der Aufnahme-Stream lieferte keinen IOSurface-gestützten BGRA-Puffer."
+                reason: "The capture stream did not deliver an IOSurface-backed BGRA buffer."
             )
         } else if layer.status == .failed {
             isActive = false
             event = .failed(
                 reason: layer.error?.localizedDescription
-                    ?? "AVSampleBufferDisplayLayer meldete einen unbekannten Fehler."
+                    ?? "AVSampleBufferDisplayLayer reported an unknown error."
             )
         } else if !layer.isReadyForMoreMediaData {
             let now = ProcessInfo.processInfo.systemUptime
@@ -116,7 +116,7 @@ private final class DirectSampleBufferPresenter: @unchecked Sendable {
                 isActive = false
                 event = .failed(
                     reason: layer.error?.localizedDescription
-                        ?? "AVSampleBufferDisplayLayer lehnte den BGRA-Frame ab."
+                        ?? "AVSampleBufferDisplayLayer rejected the BGRA frame."
                 )
             } else {
                 let size = PixelSize(
@@ -202,7 +202,7 @@ enum RendererError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .layerUnavailable:
-            return "Die Core-Animation-Ausgabe konnte nicht erstellt werden."
+            return "The Core Animation output could not be created."
         }
     }
 }
@@ -383,7 +383,7 @@ final class FrameRenderer {
             }
             if !confirmDirectPresentationIfPossible() {
                 activateCoreImageFallback(
-                    reason: "AVSampleBufferDisplayLayer blieb nach dem ersten Frame im Status „unknown“."
+                    reason: "AVSampleBufferDisplayLayer stayed in status \"unknown\" after the first frame."
                 )
             }
         }
@@ -401,7 +401,7 @@ final class FrameRenderer {
         case .failed:
             activateCoreImageFallback(
                 reason: sampleBufferLayer.error?.localizedDescription
-                    ?? "AVSampleBufferDisplayLayer meldete einen unbekannten Fehler."
+                    ?? "AVSampleBufferDisplayLayer reported an unknown error."
             )
             return true
         case .unknown:
@@ -559,7 +559,7 @@ final class FrameRenderer {
         let outputExtent = outputImage.extent.integral
         guard outputExtent.width > 0,
               outputExtent.height > 0 else {
-            recordFallbackFailure("Core Image erzeugte eine leere Bildfläche.")
+            recordFallbackFailure("Core Image produced an empty image extent.")
             return
         }
 
@@ -610,7 +610,7 @@ final class FrameRenderer {
             )
         } else {
             NSLog(
-                "Metal ist nicht verfügbar; Core Image verwendet seinen Standard-Renderer."
+                "Metal is not available; Core Image uses its default renderer."
             )
             newContext = CIContext(options: contextOptions)
         }

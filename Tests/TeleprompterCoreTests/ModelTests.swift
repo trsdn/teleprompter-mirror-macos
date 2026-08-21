@@ -29,9 +29,9 @@ func transformCodableRoundTrip() throws {
 
 @Test("Display identity prefers exact hardware serial")
 func displayIdentityUsesSerial() {
-    let stored = identity(serial: 42, uuid: "A", name: "Monitor A")
+    let stored = identity(serial: 42, uuid: "A", name: "Display A")
     let candidates = [
-        identity(serial: 7, uuid: "A", name: "Monitor A"),
+        identity(serial: 7, uuid: "A", name: "Display A"),
         identity(serial: 42, uuid: "B", name: "Umbenannt")
     ]
 
@@ -45,9 +45,9 @@ func displayIdentityUsesSerial() {
 
 @Test("Display UUID is a stable fallback when serial is absent")
 func displayIdentityUsesUUID() {
-    let stored = identity(serial: nil, uuid: "ABC", name: "Monitor")
+    let stored = identity(serial: nil, uuid: "ABC", name: "Display")
     let candidates = [
-        identity(serial: nil, uuid: "DEF", name: "Monitor"),
+        identity(serial: nil, uuid: "DEF", name: "Display"),
         identity(serial: nil, uuid: "abc", name: "Anderer Name")
     ]
 
@@ -61,9 +61,9 @@ func displayIdentityUsesUUID() {
 
 @Test("Stored serial and UUID identities never downgrade")
 func displayIdentityDoesNotDowngrade() {
-    let withSerial = identity(serial: 42, uuid: nil, name: "Monitor")
-    let withUUID = identity(serial: nil, uuid: "ABC", name: "Monitor")
-    let weak = identity(serial: nil, uuid: nil, name: "Monitor")
+    let withSerial = identity(serial: 42, uuid: nil, name: "Display")
+    let withUUID = identity(serial: nil, uuid: "ABC", name: "Display")
+    let weak = identity(serial: nil, uuid: nil, name: "Display")
 
     #expect(DisplayIdentityMatcher.uniqueMatch(
         for: withSerial,
@@ -82,14 +82,14 @@ func displayUUIDRejectsHardwareConflict() {
         product: 20,
         serial: nil,
         uuid: "ABC",
-        name: "Monitor"
+        name: "Display"
     )
     let conflicting = identity(
         vendor: 10,
         product: 21,
         serial: nil,
         uuid: "ABC",
-        name: "Monitor"
+        name: "Display"
     )
 
     #expect(DisplayIdentityMatcher.uniqueMatch(
@@ -105,7 +105,7 @@ func hardwareModelAloneIsInsufficient() {
         product: 20,
         serial: nil,
         uuid: nil,
-        name: "Alter Monitor",
+        name: "Old display",
         width: 1920,
         height: 1080
     )
@@ -114,7 +114,7 @@ func hardwareModelAloneIsInsufficient() {
         product: 20,
         serial: nil,
         uuid: nil,
-        name: "Neuer Monitor",
+        name: "New display",
         width: 2560,
         height: 1440
     )
@@ -132,7 +132,7 @@ func hardwareIdentityDoesNotDowngrade() {
         product: 20,
         serial: nil,
         uuid: nil,
-        name: "Monitor",
+        name: "Display",
         width: 1920,
         height: 1080
     )
@@ -141,7 +141,7 @@ func hardwareIdentityDoesNotDowngrade() {
         product: nil,
         serial: nil,
         uuid: nil,
-        name: "Monitor",
+        name: "Display",
         width: 1920,
         height: 1080
     )
@@ -272,7 +272,7 @@ func settingsCodecRoundTrip() throws {
     settings.activePresetIndex = 1
     settings.autoStartOutput = true
     settings.presets[1] = PresetSlot(
-        name: "Teleprompter Bühne",
+        name: "Teleprompter Stage",
         configuration: TeleprompterConfiguration(
             target: identity(
                 serial: 11,
